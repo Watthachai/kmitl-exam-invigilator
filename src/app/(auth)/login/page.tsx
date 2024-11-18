@@ -1,86 +1,122 @@
+// app/(auth)/login/page.tsx
 'use client';
 
 import { useState } from 'react';
+import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Mail, Loader2 } from 'lucide-react';
+import { Button } from "@/app/components/ui/button";
+import { validateKMITLEmail } from '@/app/lib/validation';
+import { Icons } from "@/app/components/ui/icons";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
-  const validateEmail = (email: string) => {
-    const pattern = /@kmitl\.ac\.th$/;
-    return pattern.test(email);
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+      const result = await signIn('google');
+      if (result?.error) {
+        setError('Google authentication failed');
+      }
+    } catch {
+      setError('Login failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!validateEmail(email)) {
+    if (!validateKMITLEmail(email)) {
       setError('Please use your KMITL institutional email (@kmitl.ac.th)');
       return;
     }
 
     setIsLoading(true);
     try {
-      // Implement your login logic here
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      router.push('/dashboard');
-    } catch (err) {
-      setError('Authentication failed. Please try again.');
+      const result = await signIn('email', { 
+        email, 
+        redirect: false 
+      });
+
+      if (result?.error) {
+        setError('Email login failed');
+      } else {
+        router.push('/dashboard');
+      }
+    } catch {
+      setError('Login failed');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-8">
-      <h2 className="text-2xl font-bold mb-6 text-center">Sign in</h2>
+    <div className="border rounded-md p-8 bg-white shadow-md">
+      <div className="text-center mb-6">
+        <h1 className="text-2xl font-bold">KMITL Login</h1>
+        <p className="text-gray-500 mt-2">Only @kmitl.ac.th emails allowed</p>
+      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-            Email
-          </label>
-          <div className="mt-1 relative rounded-md shadow-sm">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Mail className="h-5 w-5 text-gray-400" />
-            </div>
+      <form onSubmit={handleEmailLogin} className="space-y-4">
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              KMITL Email address
+            </label>
             <input
-              id="email"
-              name="email"
               type="email"
-              autoComplete="email"
-              required
+              id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="your.email@kmitl.ac.th"
-              className={`block w-full pl-10 pr-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm ${
-                error ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+              className={`mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:ring-blue-500 focus:border-blue-500 ${
+                error ? 'border-red-500' : 'border-gray-300'
               }`}
+              placeholder="your.email@kmitl.ac.th"
             />
+            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
           </div>
-          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-        </div>
+          <Button 
+            type="submit" 
+            disabled={isLoading}
+            className="w-full"
+            variant="secondary"
+          >
+            {isLoading ? 'Signing in...' : 'Continue'}
+          </Button>
+        </form>
 
-        <button
-          type="submit"
+        <div className="relative w-full max-w-md">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t"></span>
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-white px-2 text-gray-500">
+              Or continue with
+            </span>
+          </div>
+        </div>
+      
+      <div className="space-y-4">
+        <Button 
+          onClick={handleGoogleLogin} 
           disabled={isLoading}
-          className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full flex items-center justify-center"
+          variant="outline"
         >
           {isLoading ? (
-            <>
-              <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" />
-              Signing in...
-            </>
+            <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
           ) : (
-            'Sign in'
+            <Icons.google className="mr-2 h-4 w-4" />
           )}
-        </button>
-      </form>
+          Continue with Google
+        </Button>
+
+      </div>
     </div>
   );
 }
