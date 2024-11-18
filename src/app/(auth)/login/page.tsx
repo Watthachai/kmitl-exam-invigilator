@@ -90,33 +90,25 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="relative w-full max-w-md">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t"></span>
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-gray-500">
-              Or continue with
-            </span>
-          </div>
+        <div className="mt-6 flex flex-col items-center space-y-4">
+          <p className="text-sm text-gray-500">Or continue with</p>
+          <Button
+            variant="google"
+            size="default"
+            onClick={handleGoogleLogin}
+            disabled={isLoading}
+            className="w-full max-w-xs flex justify-center items-center"
+          >
+            {isLoading ? (
+              <Icons.spinner className="animate-spin h-4 w-4" />
+            ) : (
+              <>
+                <Icons.google className="mr-2 h-4 w-4" />
+                Continue with Google
+              </>
+            )}
+          </Button>
         </div>
-      
-      <div className="space-y-4">
-        <Button 
-          onClick={handleGoogleLogin} 
-          disabled={isLoading}
-          className="w-full flex items-center justify-center"
-          variant="outline"
-        >
-          {isLoading ? (
-            <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Icons.google className="mr-2 h-4 w-4" />
-          )}
-          Continue with Google
-        </Button>
-
-      </div>
     </div>
   );
 }
