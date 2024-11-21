@@ -23,7 +23,7 @@ export const authOptions: AuthOptions = {
       return true
     },
     async redirect({ baseUrl }) {
-      return `${baseUrl}/dashboard`
+      return `${baseUrl}/dashboard/`
     }
   }
 }
