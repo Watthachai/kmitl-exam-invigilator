@@ -1,7 +1,7 @@
-import NextAuth, { AuthOptions } from "next-auth";
+import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
-export const authOptions: AuthOptions = {
+const handler = NextAuth({
     providers: [
         GoogleProvider({
             clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -20,10 +20,6 @@ export const authOptions: AuthOptions = {
         },
     },
     secret: process.env.NEXTAUTH_SECRET,
-};
+})
 
-// ใช้ handler เพื่อจัดการ API และ Export ตาม HTTP Methods
-const handler = NextAuth(authOptions);
-
-export const GET = handler;
-export const POST = handler;
+export { handler as GET, handler as POST }
