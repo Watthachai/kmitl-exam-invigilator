@@ -1,19 +1,52 @@
-import { neon } from '@neondatabase/serverless';
+"use client";
 
-export default function Page() {
-  async function create(formData: FormData) {
-    'use server';
-    // Connect to the Neon database
-    const sql = neon(`${process.env.DATABASE_URL}`);
-    const comment = formData.get('comment');
-    // Insert the comment from the form into the Postgres database
-    await sql('INSERT INTO comments (comment) VALUES ($1)', [comment]);
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { signOut } from "next-auth/react";
+
+export default function Dashboard() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    } else if (status === "authenticated") {
+      setIsLoading(false);
+    }
+  }, [status, router]);
+
+  if (status === "loading" || isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    return null;
   }
 
   return (
-    <form action={create}>
-      <input type="text" placeholder="write a comment" name="comment" />
-      <button type="submit">Submit</button>
-    </form>
+    <div className="flex flex-col items-center justify-center min-h-screen p-4">
+      <h1 className="text-3xl font-bold mb-4">Welcome to the Dashboard</h1>
+      <div className="bg-gray-100 p-4 rounded-lg shadow-md text-center">
+        <p className="text-lg mb-2">
+          Hello, <strong>{session?.user?.name || "User"}</strong>!
+        </p>
+        <p className="text-gray-700">
+          Email: {session?.user?.email || "No email provided"}
+        </p>
+      </div>
+      <button
+        onClick={() => signOut()}
+        className="mt-6 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+      >
+        Logout
+      </button>
+    </div>
   );
 }
