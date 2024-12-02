@@ -15,7 +15,7 @@ export default function DashboardLayout({
         {/* Left Sidebar */}
         <aside className="fixed left-0 top-0 h-full w-64 bg-gray-900 text-white">
           <div className="p-4">
-            <h1 className="text-xl font-bold">One</h1>
+            <h1 className="text-xl font-bold">KMITL Invigilator</h1>
           </div>
           <SideNav />
         </aside>

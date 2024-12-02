@@ -11,7 +11,7 @@ interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
-  ({ className, src, alt, ...props }, ref) => (
+  ({ className, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(

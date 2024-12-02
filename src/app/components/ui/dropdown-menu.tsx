@@ -9,11 +9,6 @@ interface DropdownMenuProps {
   className?: string
 }
 
-interface DropdownMenuTriggerProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode
-  asChild?: boolean
-}
-
 interface DropdownMenuContentProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode
   align?: "start" | "end"
@@ -27,11 +22,11 @@ interface DropdownMenuItemProps extends React.ButtonHTMLAttributes<HTMLButtonEle
   children: React.ReactNode
 }
 
-interface DropdownMenuTriggerProps extends React.HTMLAttributes<HTMLDivElement> {
+interface DropdownMenuTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     children: React.ReactNode
     asChild?: boolean
-    onClick?: React.MouseEventHandler<HTMLElement> // More generic event handler type
-  }
+    onClick?: React.MouseEventHandler<HTMLElement>
+}
 
 const DropdownMenuContext = React.createContext<{
   open: boolean
@@ -53,7 +48,7 @@ export function DropdownMenuTrigger({ children, asChild, className, ...props }: 
     const { open, setOpen } = React.useContext(DropdownMenuContext)
     
     if (asChild) {
-      return React.cloneElement(children as React.ReactElement<any>, {
+      return React.cloneElement(children as React.ReactElement<{ onClick?: React.MouseEventHandler<HTMLElement> }>, {
         onClick: (e: React.MouseEvent<HTMLElement>) => {
           setOpen(!open);
           props.onClick?.(e);
