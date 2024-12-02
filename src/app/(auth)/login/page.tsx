@@ -1,8 +1,8 @@
 // app/(auth)/login/page.tsx
 'use client';
 
-import { useState } from 'react';
-import { signIn } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/app/components/ui/button";
 import { validateKMITLEmail } from '@/app/lib/validation';
@@ -13,6 +13,13 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { status } = useSession();
+  
+  useEffect(() => {
+    if (status === 'authenticated') {
+      router.push('/dashboard');
+    }
+  })
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
