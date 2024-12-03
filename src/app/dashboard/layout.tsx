@@ -1,31 +1,37 @@
+// app/dashboard/layout.tsx
 "use client";
 
 import { SessionProvider } from "next-auth/react";
 import { SideNav } from '@/app/components/navigation/side-nav';
 import { TopNav } from '@/app/components/navigation/top-nav';
+import { useState } from 'react';
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   return (
     <SessionProvider>
       <div className="min-h-screen bg-gray-100">
         {/* Left Sidebar */}
-        <aside className="fixed left-0 top-0 h-full w-64 bg-gray-900 text-white">
-          <div className="p-4">
-            <h1 className="text-xl font-bold">KMITL Invigilator</h1>
-          </div>
-          <SideNav />
-        </aside>
+        <SideNav 
+          isMobileMenuOpen={isMobileMenuOpen} 
+          setIsMobileMenuOpen={setIsMobileMenuOpen}
+        />
 
         {/* Main Content */}
-        <div className="ml-64 flex flex-col min-h-screen">
+        <div className={`
+          transition-[margin] duration-200 ease-in-out
+          lg:ml-64 
+          ${isMobileMenuOpen ? 'ml-64' : 'ml-0'}
+        `}>
           {/* Top Navigation */}
           <header className="bg-white border-b">
             <div className="px-4 py-3">
-              <TopNav />
+              <TopNav onMenuClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} />
             </div>
           </header>
 
@@ -34,6 +40,14 @@ export default function DashboardLayout({
             {children}
           </main>
         </div>
+
+        {/* Overlay */}
+        {isMobileMenuOpen && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
       </div>
     </SessionProvider>
   );

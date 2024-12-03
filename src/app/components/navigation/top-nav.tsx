@@ -1,7 +1,7 @@
 // app/components/navigation/top-nav.tsx
 "use client";
 
-import { Bell, ChevronDown, Search } from 'lucide-react';
+import { Bell, ChevronDown, Menu } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { useState, useEffect } from 'react';
@@ -15,7 +15,11 @@ import {
 } from '@/app/components/ui/dropdown-menu';
 import { Button } from '@/app/components/ui/button';
 
-export const TopNav = () => {
+interface TopNavProps {
+  onMenuClick: () => void;
+}
+
+export const TopNav = ({ onMenuClick}: TopNavProps) => {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const { data: session, status } = useSession();
@@ -42,16 +46,12 @@ export const TopNav = () => {
 
   return (
     <div className="flex items-center justify-between">
-      <div className="flex items-center gap-4 flex-1">
-        <div className="relative w-96">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-          <input
-            type="text"
-            placeholder="Search"
-            className="pl-8 h-9 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-gray-400"
-          />
-        </div>
-      </div>
+      <button
+        className="lg:hidden p-2 -ml-2 rounded-md hover:bg-gray-100"
+        onClick={onMenuClick}
+      >
+        <Menu className="h-6 w-6" />
+      </button>
       
       <div className="flex items-center gap-4">
         <Button variant="default" size="icon">
