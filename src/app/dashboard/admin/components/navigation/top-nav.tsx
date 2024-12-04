@@ -12,7 +12,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/app/components/ui/dropdown-menu';
+} from '@/app/dashboard/admin/components/ui/dropdown-menu';
 import { Button } from '@/app/components/ui/button';
 
 interface TopNavProps {
