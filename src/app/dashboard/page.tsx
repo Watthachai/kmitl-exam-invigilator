@@ -18,7 +18,7 @@ export default function DashboardRedirect() {
     } else if (session?.user?.role === "admin") {
       router.push("/dashboard/admin");
     } else if (session?.user?.role === "user") {
-      router.push("/dashboard/user");
+      router.push("/dashboard");
     } else {
         throw new Error('Failed to fetch');
     }

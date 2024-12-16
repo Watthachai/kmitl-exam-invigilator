@@ -1,14 +1,9 @@
 "use client";
-
-import { useSession } from "next-auth/react";
+import TableView from "../components/pages/table-view";
 
 export default function TablePage() {
-  const { data: session } = useSession();
 
   return (
-    <div>
-      <h1>Table Page</h1>
-      <p>Logged in as: {session?.user?.email}</p>
-    </div>
+    <TableView />
   );
 }
