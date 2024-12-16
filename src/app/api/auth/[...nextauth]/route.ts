@@ -33,7 +33,32 @@ const handler = NextAuth({
     async signIn({ account, profile }) {
       if (account?.provider === "google") {
         // Allow only emails ending with "@kmitl.ac.th"
-        return profile?.email?.endsWith("@kmitl.ac.th") || false;
+        if (profile?.email?.endsWith("@kmitl.ac.th")) {
+          const user = await prisma.user.findUnique({
+            where: { email: profile.email },
+          });
+
+          if (user) {
+            // Check if the user is already linked to an invigilator
+            const invigilator = await prisma.invigilator.findUnique({
+              where: { userId: user.id },
+            });
+
+            if (!invigilator) {
+              // Link the user with the invigilator model
+              await prisma.invigilator.create({
+                data: {
+                  name: profile.name ?? "Unknown",
+                  userId: user.id,
+                  // Add other necessary fields here
+                },
+              });
+            }
+          }
+
+          return true;
+        }
+        return false;
       }
       return true;
     },

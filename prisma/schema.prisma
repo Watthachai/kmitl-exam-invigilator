@@ -12,13 +12,12 @@ datasource db {
 generator client {
   provider = "prisma-client-js"
 }
-
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String  @map("user_id")
+  id                 String  @id @default(cuid()) @map("AccountID")
+  userId             String
   type               String
   provider           String
-  providerAccountId  String  @map("provider_account_id")
+  providerAccountId  String
   refresh_token      String? @db.Text
   access_token       String? @db.Text
   expires_at         Int?
@@ -35,23 +34,24 @@ model Account {
 }
 
 model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique@map("session_token")
-  userId       String   @map("user_id")
+  id           String   @id @default(cuid()) @map("SessionID")
+  sessionToken String   @unique
+  userId       String
   expires      DateTime
   user         User     @relation(fields:[userId], references:[id], onDelete: Cascade)
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String    @id @default(cuid()) @map("UserID")
   name          String?
   email         String?@unique
   emailVerified DateTime?
   image         String?
-  posts         Post[]
   accounts      Account[]
   sessions      Session[]
   role          String    @default("user")
+  professor     Professor? // Link to Professor if user is a professor
+  invigilator   Invigilator? // Link to Invigilator if user is an invigilator
 }
 
 model VerificationToken {
@@ -63,11 +63,86 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-model Post {
-  id        String  @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean @default(false)
-  author    User?@relation(fields:[authorId], references:[id])
-  authorId  String?
+
+model Subject {
+  id            String         @id @default(cuid()) @map("SubjectID")
+  code          String         @unique // Subject code
+  name          String
+  subjectGroups SubjectGroup[]
+  department    Department     @relation(fields: [departmentId], references: [id])
+  departmentId  String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model SubjectGroup {
+  id           String       @id @default(cuid()) @map("SubjectGroupID")
+  groupNumber  String       // e.g. "901", "902"
+  year         Int         // Academic year
+  studentCount Int
+  subject      Subject     @relation(fields: [subjectId], references: [id])
+  subjectId    String
+  professor    Professor   @relation(fields: [professorId], references: [id])
+  professorId  String
+  schedules    Schedule[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model Invigilator {
+  id          String     @id @default(cuid()) @map("InvigilatorID")
+  name        String
+  type        String     @default("INTERNAL") // INTERNAL, EXTERNAL, STAFF
+  professorId String?    // Optional link to professor if internal
+  professor   Professor? @relation(fields: [professorId], references: [id])
+  schedules   Schedule[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  userId      String?    @unique // Link to User
+  user        User?      @relation(fields: [userId], references: [id])
+}
+
+model Professor {
+  id            String         @id @default(cuid()) @map("ProfessorID")
+  name          String
+  subjectGroups SubjectGroup[]
+  invigilator   Invigilator[] // One professor can be an invigilator
+  messages      Message[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  userId        String?    @unique // Link to User
+  user          User?      @relation(fields: [userId], references: [id])
+}
+
+model Schedule {
+  id             String      @id @default(cuid()) @map("ScheduleID")
+  date           DateTime
+  startTime      DateTime
+  endTime        DateTime
+  building       String
+  roomNumber     String
+  subjectGroup   SubjectGroup @relation(fields: [subjectGroupId], references: [id])
+  subjectGroupId String
+  invigilator    Invigilator @relation(fields: [invigilatorId], references: [id])
+  invigilatorId  String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model Department {
+  id       String    @id @default(cuid()) @map("DepartmentID")
+  name     String
+  subjects Subject[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Message {
+  id          String    @id @default(cuid()) @map("MessageID")
+  professor   Professor @relation(fields: [professorId], references: [id])
+  professorId String
+  content     String
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }

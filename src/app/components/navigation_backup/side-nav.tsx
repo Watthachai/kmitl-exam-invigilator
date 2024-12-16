@@ -46,7 +46,7 @@ export const SideNav = ({ isMobileMenuOpen, setIsMobileMenuOpen}: SideNavProps) 
 
   const navItems = [
     { icon: Home, label: 'Dashboard', href: '/dashboard' },
-    { icon: Table, label: 'Tables', href: '/dashboard/tables' },
+    { icon: Table, label: 'Tables', href: '/dashboard/admin/tables' },
     { icon: FormInput, label: 'Forms', href: '/dashboard/forms' },
     { icon: Layout, label: 'UI', href: '/dashboard/ui' },
     { icon: Smartphone, label: 'Responsive', href: '/dashboard/responsive' },

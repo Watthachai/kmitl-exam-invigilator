@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/app/components/ui/button";
-import { validateKMITLEmail } from '@/app/lib/validation';
+import { validateKMITLEmail } from '@/app/lib/data-validation';
 import { Icons } from "@/app/components/ui/icons";
 
 export default function LoginPage() {
