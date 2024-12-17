@@ -1,17 +1,20 @@
-import prisma from '@/app/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/app/lib/prisma';
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+type RouteContext = {
+  params: {
+    id: string;
+  };
+};
+
+export async function PUT(request: NextRequest, context: RouteContext) {
   try {
-    const { id } = params; // Fix here
+    const id = context.params.id;
     if (!id) {
       return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
     }
 
-    const body = await req.json();
+    const body = await request.json();
     const { name, code, departmentId } = body;
 
     if (!name || !code || !departmentId) {
@@ -24,35 +27,30 @@ export async function PUT(
     const updatedSubject = await prisma.subject.update({
       where: { id },
       data: { name, code, departmentId },
+      include: {
+        department: true,
+        subjectGroups: true,
+      },
     });
 
-    return NextResponse.json(updatedSubject, { status: 200 });
+    return NextResponse.json(updatedSubject);
   } catch (error) {
-    console.error('Error updating subject:', error);
-    return NextResponse.json(
-      { error: 'Failed to update subject' },
-      { status: 500 }
-    );
+    console.error('Failed to update subject:', error);
+    return NextResponse.json({ error: 'Failed to update subject' }, { status: 500 });
   }
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
-    const { id } = params; // Fix here
+    const id = context.params.id;
     if (!id) {
       return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
     }
 
     await prisma.subject.delete({ where: { id } });
-    return NextResponse.json({ message: 'Subject deleted successfully' }, { status: 200 });
+    return NextResponse.json({ message: 'Subject deleted successfully' });
   } catch (error) {
-    console.error('Error deleting subject:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete subject' },
-      { status: 500 }
-    );
+    console.error('Failed to delete subject:', error);
+    return NextResponse.json({ error: 'Failed to delete subject' }, { status: 500 });
   }
 }
