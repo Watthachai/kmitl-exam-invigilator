@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
 
-import { Overview } from '@/app/components/dashboard_backup/overview';
-import { ActivityFeed } from '@/app/components/dashboard_backup/activity-feed';
-import { StatsOverview } from '@/app/components/dashboard_backup/stats-overview';
+import { Overview } from '@/app/components/dashboard/overview';
+import { ActivityFeed } from '@/app/components/dashboard/activity-feed';
+import { StatsOverview } from '@/app/components/dashboard/stats-overview';
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
