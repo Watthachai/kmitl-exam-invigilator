@@ -2,8 +2,8 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
-import { SideNav } from '@/app/components/navigation_backup/side-nav';
-import { TopNav } from '@/app/components/navigation_backup/top-nav';
+import { SideNav } from '@/app/components/navigation/side-nav';
+import { TopNav } from '@/app/components/navigation/top-nav';
 import { useState } from 'react';
 
 export default function DashboardLayout({

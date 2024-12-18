@@ -1,10 +1,24 @@
 // app/dashboard/components/navigation/side-nav.tsx
 "use client";
 
-import { Home, Table, FormInput, Layout, Smartphone, Palette, User, LogIn, AlertTriangle, Github, LucideIcon, Menu, X } from 'lucide-react';
+import { useSession } from 'next-auth/react';
+import { Home, Calendar, Users, Book, Settings, User, LucideIcon, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
+
+const adminNavItems = [
+  { href: '/dashboard/admin', label: 'Dashboard', icon: Home },
+  { href: '/dashboard/admin/subjects', label: 'Subjects', icon: Book },
+  { href: '/dashboard/admin/users', label: 'Users', icon: Users },
+  { href: '/dashboard/admin/settings', label: 'Settings', icon: Settings },
+];
+
+const userNavItems = [
+  { href: '/dashboard', label: 'Dashboard', icon: Home },
+  { href: '/schedule', label: 'Schedule', icon: Calendar },
+  { href: '/profile', label: 'Profile', icon: User },
+];
 
 const NavItem = ({ icon: Icon, label, href, onClick }: {
   icon: LucideIcon;
@@ -34,7 +48,10 @@ interface SideNavProps {
 }
 
 export const SideNav = ({ isMobileMenuOpen, setIsMobileMenuOpen}: SideNavProps) => {
+  const { data: session } = useSession();
   const [mounted, setMounted] = useState(false);
+
+  const navItems = session?.user?.role === 'admin' ? adminNavItems : userNavItems;
 
   useEffect(() => {
     setMounted(true);
@@ -43,19 +60,6 @@ export const SideNav = ({ isMobileMenuOpen, setIsMobileMenuOpen}: SideNavProps) 
   const closeMobileMenu = () => {
     setIsMobileMenuOpen(false);
   };
-
-  const navItems = [
-    { icon: Home, label: 'Dashboard', href: '/dashboard' },
-    { icon: Table, label: 'Tables', href: '/dashboard/admin/tables' },
-    { icon: FormInput, label: 'Forms', href: '/dashboard/forms' },
-    { icon: Layout, label: 'UI', href: '/dashboard/ui' },
-    { icon: Smartphone, label: 'Responsive', href: '/dashboard/responsive' },
-    { icon: Palette, label: 'Styles', href: '/dashboard/styles' },
-    { icon: User, label: 'Profile', href: '/dashboard/profile' },
-    { icon: LogIn, label: 'Login', href: '/dashboard/login' },
-    { icon: AlertTriangle, label: 'Error', href: '/dashboard/error' },
-    { icon: Github, label: 'GitHub', href: 'https://github.com' },
-  ];
 
   if (!mounted) return null;
 
