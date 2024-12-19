@@ -7,7 +7,7 @@
   --foreground: #171717;
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: white) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
@@ -18,4 +18,58 @@ body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.card {
+  --card-bg: #ffffff;
+  --card-text: #0a0a0a;
+  --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 
+                 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Override the Card component styles */
+.rounded-lg.border.border-gray-200.bg-white {
+  background-color: var(--card-bg);
+  color: var(--card-text);
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 0.2s ease-in-out;
+}
+
+.rounded-lg.border.border-gray-200.bg-white:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+              0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Ensure text color stays dark even in dark mode */
+.dark .rounded-lg.border.border-gray-200.bg-white {
+  background-color: var(--card-bg);
+  color: var(--card-text);
+  border-color: #e5e7eb;
+}
+
+
+/* Table Styles */
+.data-table {
+  @apply w-full bg-white rounded-lg shadow;
+}
+
+.data-table thead th {
+  @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+}
+
+.data-table tbody td {
+  @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
+}
+
+.data-table tbody tr:hover {
+  @apply bg-indigo-50;
+}
+
+/* Pagination Styles */
+.pagination-button {
+  @apply px-3 py-1 rounded-md text-sm font-medium hover:bg-indigo-500 hover:text-white transition-colors;
+}
+
+.pagination-button.active {
+  @apply bg-indigo-500 text-white;
 }

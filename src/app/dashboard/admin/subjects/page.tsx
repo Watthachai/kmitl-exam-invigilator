@@ -26,6 +26,7 @@ export default function SubjectsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [newSubject, setNewSubject] = useState({ name: '', code: '', departmentId: '' });
+  
 
   // Fetch Subjects
   const fetchSubjects = () => {
@@ -39,11 +40,6 @@ export default function SubjectsPage() {
     fetchSubjects();
   }, []);
 
-  // Edit Handler
-  const handleEditClick = (subject: Subject) => {
-    setSelectedSubject(subject);
-    setShowEditModal(true);
-  };
 
   const handleEditConfirm = async () => {
     if (!selectedSubject) return;
@@ -68,12 +64,6 @@ export default function SubjectsPage() {
     }
   };
   
-
-  // Delete Handler
-  const handleDeleteClick = (subject: Subject) => {
-    setSelectedSubject(subject);
-    setShowDeleteModal(true);
-  };
 
   const handleDeleteConfirm = async () => {
     if (!selectedSubject) return;
@@ -113,54 +103,60 @@ export default function SubjectsPage() {
   };
 
   return (
-    <div className="p-5">
-      <h1 className="text-2xl font-bold mb-4">Subjects</h1>
-      <button
-        className="mb-4 bg-green-500 text-white px-3 py-2 rounded"
-        onClick={() => setShowAddModal(true)}
-      >
-        Add New Subject
-      </button>
-      <table className="w-full border-collapse border">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="border p-2 text-black">ID</th>
-            <th className="border p-2 text-black">Code</th>
-            <th className="border p-2 text-black">Name</th>
-            <th className="border p-2 text-black">Subject Group</th>
-            <th className="border p-2 text-black">Department</th>
-            <th className="border p-2 text-black">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {subjects.map((subject) => (
-            <tr key={subject.id} className="hover:bg-gray-100">
-              <td className="border p-2 text-black">{subject.id}</td>
-              <td className="border p-2 text-black">{subject.code}</td>
-              <td className="border p-2 text-black">{subject.name}</td>
-              <td className="border p-2 text-black">
-                {formatGroupNumbers(subject.subjectGroups) || 'N/A'}
-              </td>
-              <td className="border p-2 text-black">{subject.department?.name || 'N/A'}</td>
-              <td className="border p-2 text-black space-x-2">
-                <button
-                  className="bg-blue-500 text-white px-2 py-1 rounded"
-                  onClick={() => handleEditClick(subject)}
+    <div className="max-w-[1400px] mx-auto">
+      <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0 bg-white/95 backdrop-blur-sm">
+              <tr className="border-b border-gray-100">
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Code</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Subject Name</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Groups</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Department</th>
+                <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {subjects.map((subject) => (
+                <tr 
+                  key={subject.id}
+                  className="group transition-all hover:bg-gray-50/50"
                 >
-                  Edit
-                </button>
-                <button
-                  className="bg-red-500 text-white px-2 py-1 rounded"
-                  onClick={() => handleDeleteClick(subject)}
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
+                  <td className="px-6 py-4 text-sm text-gray-600">{subject.code}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-gray-700">{subject.name}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {formatGroupNumbers(subject.subjectGroups) || 'ยังไม่มีกลุ่ม'}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{subject.department.name}</td>
+                  <td className="px-2 py-4 text-right">
+                    <div className="flex items-center justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => {
+                          setSelectedSubject(subject);
+                          setShowEditModal(true);
+                        }}
+                        className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedSubject(subject);
+                          setShowDeleteModal(true);
+                        }}
+                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-100 rounded-md transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
       {/* Edit Modal */}
       {showEditModal && selectedSubject && (
         <PopupModal
@@ -200,7 +196,9 @@ export default function SubjectsPage() {
           onConfirm={handleDeleteConfirm}
           confirmText="Yes, Delete"
         >
-          <p>Are you sure you want to delete <strong>{selectedSubject.name}</strong>?</p>
+          <p className="text-gray-700">
+            Are you sure you want to delete <strong>{selectedSubject.name}</strong>?
+          </p>
         </PopupModal>
       )}
 
@@ -212,28 +210,34 @@ export default function SubjectsPage() {
           onConfirm={handleAddConfirm}
           confirmText="Add Subject"
         >
-          <div>
-            <label>Code</label>
-            <input
-              type="text"
-              value={newSubject.code}
-              onChange={(e) => setNewSubject({ ...newSubject, code: e.target.value })}
-              className="w-full border p-2"
-            />
-            <label>Name</label>
-            <input
-              type="text"
-              value={newSubject.name}
-              onChange={(e) => setNewSubject({ ...newSubject, name: e.target.value })}
-              className="w-full border p-2"
-            />
-            <label>Department ID</label>
-            <input
-              type="text"
-              value={newSubject.departmentId}
-              onChange={(e) => setNewSubject({ ...newSubject, departmentId: e.target.value })}
-              className="w-full border p-2"
-            />
+          <div className="space-y-4">
+            <div>
+              <label className="block text-gray-700">Code</label>
+              <input
+                type="text"
+                value={newSubject.code}
+                onChange={(e) => setNewSubject({ ...newSubject, code: e.target.value })}
+                className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-gray-700">Name</label>
+              <input
+                type="text"
+                value={newSubject.name}
+                onChange={(e) => setNewSubject({ ...newSubject, name: e.target.value })}
+                className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-gray-700">Department ID</label>
+              <input
+                type="text"
+                value={newSubject.departmentId}
+                onChange={(e) => setNewSubject({ ...newSubject, departmentId: e.target.value })}
+                className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
         </PopupModal>
       )}
