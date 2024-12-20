@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import PopupModal from '@/app/components/ui/popup-modal';
+import { FiEdit2, FiTrash2, FiDownload, FiPrinter, FiSearch } from 'react-icons/fi';
 
 const formatGroupNumbers = (groups: SubjectGroup[]): string => {
   return groups.map((group) => group.groupNumber).join(', ');
@@ -26,7 +27,20 @@ export default function SubjectsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [newSubject, setNewSubject] = useState({ name: '', code: '', departmentId: '' });
+
+  //Search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredSubjects, setFilteredSubjects] = useState<Subject[]>([]);
   
+  // Add filter effect
+  useEffect(() => {
+    const filtered = subjects.filter((subject) =>
+      subject.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      subject.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      subject.department.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    setFilteredSubjects(filtered);
+  }, [subjects, searchQuery]);
 
   // Fetch Subjects
   const fetchSubjects = () => {
@@ -102,10 +116,55 @@ export default function SubjectsPage() {
     }
   };
 
+  //Export
+  const handleExportData = () => {
+    const csvContent = subjects.map(subject => 
+      `${subject.code},${subject.name},${subject.department.name}`
+    ).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'subjects.csv';
+    a.click();
+  };
+
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="max-w-auto mx-auto">
+      <div className="mb-4 flex justify-between items-center">
+        <h1 className="text-2xl font-semibold text-gray-800">Subjects</h1>
+
+        <div className="relative w-72">
+          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Search subjects..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleExportData}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
+          >
+            <FiDownload className="w-4 h-4" />
+            Export CSV
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+          >
+            <FiPrinter className="w-4 h-4" />
+            Print
+          </button>
+        </div>
+      </div>
       <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100">
         <div className="overflow-x-auto">
+          
           <table className="w-full border-collapse">
             <thead className="sticky top-0 bg-white/95 backdrop-blur-sm">
               <tr className="border-b border-gray-100">
@@ -117,42 +176,39 @@ export default function SubjectsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {subjects.map((subject) => (
-                <tr 
-                  key={subject.id}
-                  className="group transition-all hover:bg-gray-50/50"
-                >
-                  <td className="px-6 py-4 text-sm text-gray-600">{subject.code}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-700">{subject.name}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    {formatGroupNumbers(subject.subjectGroups) || 'ยังไม่มีกลุ่ม'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{subject.department.name}</td>
-                  <td className="px-2 py-4 text-right">
-                    <div className="flex items-center justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => {
-                          setSelectedSubject(subject);
-                          setShowEditModal(true);
-                        }}
-                        className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedSubject(subject);
-                          setShowDeleteModal(true);
-                        }}
-                        className="px-3 py-1 text-sm text-red-600 hover:bg-red-100 rounded-md transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+            {filteredSubjects.map((subject) => (
+              <tr key={subject.id} className="hover:bg-gray-50">
+                <td className="px-6 py-4">{subject.code}</td>
+                <td className="px-6 py-4">{subject.name}</td>
+                <td className="px-6 py-4">{formatGroupNumbers(subject.subjectGroups) || 'ไม่มีกลุ่มเรียน'}</td>
+                <td className="px-6 py-4">{subject.department.name}</td>
+                <td className="px-6 py-4">
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedSubject(subject);
+                        setShowEditModal(true);
+                      }}
+                      className="flex items-center gap-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                    >
+                      <FiEdit2 className="w-4 h-4" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedSubject(subject);
+                        setShowDeleteModal(true);
+                      }}
+                      className="flex items-center gap-1 px-3 py-1 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                    >
+                      <FiTrash2 className="w-4 h-4" />
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
           </table>
         </div>
       </div>
