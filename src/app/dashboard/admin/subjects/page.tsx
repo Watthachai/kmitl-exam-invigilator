@@ -133,6 +133,12 @@ export default function SubjectsPage() {
     <div className="max-w-auto mx-auto">
       <div className="mb-4 flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-gray-800">Subjects</h1>
+        
+        {/*Add Create subject Button*/}
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+          >Create Subject</button>
 
         <div className="relative w-72">
           <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
