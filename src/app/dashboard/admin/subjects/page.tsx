@@ -27,6 +27,11 @@ export default function SubjectsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [newSubject, setNewSubject] = useState({ name: '', code: '', departmentId: '' });
+  const [selectedRowData, setSelectedRowData] = useState<SheetData | null>(null);
+
+  const handleDataSelect = (rowData: SheetData) => {
+    setSelectedRowData(rowData);
+  };
 
   //Search
   const [searchQuery, setSearchQuery] = useState('');
