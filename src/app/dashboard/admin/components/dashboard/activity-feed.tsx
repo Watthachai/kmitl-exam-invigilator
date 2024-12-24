@@ -12,7 +12,7 @@ const activities = [
     progress: 70,
   },
   {
-    user: 'Hope Howe',
+    user: 'Watt Howe',
     amount: 470.26,
     date: '3 days ago',
     type: 'Payment',

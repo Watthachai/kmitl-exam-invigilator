@@ -2,14 +2,21 @@
 "use client";
 
 import { useSession } from 'next-auth/react';
-import { Home, Calendar, Users, Book, Settings, User, LucideIcon, Menu, X } from 'lucide-react';
+import { Home, Calendar, Users, Book, Settings, User, LucideIcon, Menu, X, Table, MessageCircle } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
 const adminNavItems = [
   { href: '/dashboard/admin', label: 'Dashboard', icon: Home },
+  { href: '/dashboard/admin/tables', label: 'Tables', icon: Table },
+  { href: '/dashboard/admin/departments', label: 'Departments', icon: Book },
+  { href: '/dashboard/admin/invigilators', label: 'Invigilators', icon: Users },
+  { href: '/dashboard/admin/messages', label: 'Messages', icon: MessageCircle},
+  { href: '/dashboard/admin/professors', label: 'Professors', icon: Users },
+  { href: '/dashboard/admin/exams', label: 'Exams', icon: Calendar },
   { href: '/dashboard/admin/subjects', label: 'Subjects', icon: Book },
+  { href: '/dashboard/admin/rooms', label: 'Rooms', icon: Book },
   { href: '/dashboard/admin/users', label: 'Users', icon: Users },
   { href: '/dashboard/admin/settings', label: 'Settings', icon: Settings },
 ];
