@@ -1,10 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { parseExcelFile } from '@/app/lib/excel-wrapper';
 
+interface TableRow {
+  [key: string]: string | number | null;
+}
+
 export default function TableImportPage() {
-  const [tableData, setTableData] = useState<any[]>([]);
+  const [tableData, setTableData] = useState<TableRow[]>([]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
