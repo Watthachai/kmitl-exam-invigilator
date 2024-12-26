@@ -12,6 +12,11 @@ interface SubjectGroup {
   groupNumber: string;
 }
 
+interface Department {
+  id: string;
+  name: string;
+}
+
 interface Subject {
   id: string;
   code: string;
@@ -27,10 +32,14 @@ export default function SubjectsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [newSubject, setNewSubject] = useState({ name: '', code: '', departmentId: '' });
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   //Search
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredSubjects, setFilteredSubjects] = useState<Subject[]>([]);
+
+  //Validation
+  const [isSubmitted, setIsSubmitted] = useState(false);
   
   // Add filter effect
   useEffect(() => {
@@ -53,6 +62,20 @@ export default function SubjectsPage() {
   useEffect(() => {
     fetchSubjects();
   }, []);
+
+  // Fetch Departments
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const response = await fetch('/api/departments');
+        const data = await response.json();
+        setDepartments(data);
+      } catch (error) {
+        console.error('Failed to fetch departments', error);
+      }
+    };
+    fetchDepartments();
+    }, []);
 
 
   const handleEditConfirm = async () => {
@@ -98,6 +121,10 @@ export default function SubjectsPage() {
 
   // Add Handler
   const handleAddConfirm = async () => {
+    if (!newSubject.name || !newSubject.code || !newSubject.departmentId) {
+      setIsSubmitted(true);
+      return;
+    }
     try {
       const response = await fetch('/api/subjects', {
         method: 'POST',
@@ -108,6 +135,7 @@ export default function SubjectsPage() {
         fetchSubjects();
         setShowAddModal(false);
         setNewSubject({ name: '', code: '', departmentId: '' });
+        setIsSubmitted(false);
       } else {
         console.error('Failed to add subject');
       }
@@ -115,6 +143,7 @@ export default function SubjectsPage() {
       console.error('Error:', error);
     }
   };
+  
 
   //Export
   const handleExportData = () => {
@@ -292,13 +321,25 @@ export default function SubjectsPage() {
               />
             </div>
             <div>
-              <label className="block text-gray-700">Department ID</label>
-              <input
-                type="text"
+            <label className="block text-gray-700">Department</label>
+              <select
                 value={newSubject.departmentId}
                 onChange={(e) => setNewSubject({ ...newSubject, departmentId: e.target.value })}
-                className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                className={`w-full border p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500
+                  ${isSubmitted && !newSubject.departmentId 
+                    ? 'border-red-500 bg-red-50' 
+                    : 'border-gray-300'}`}
+              >
+                <option value="">Select Department</option>
+                {departments.map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
+              {isSubmitted && !newSubject.departmentId && (
+                <p className="text-red-500 text-sm">Department is required</p>
+              )}
             </div>
           </div>
         </PopupModal>
