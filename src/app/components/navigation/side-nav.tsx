@@ -16,6 +16,7 @@ const adminNavItems = [
   { href: '/dashboard/admin/professors', label: 'Professors', icon: Users },
   { href: '/dashboard/admin/exams', label: 'Exams', icon: Calendar },
   { href: '/dashboard/admin/subjects', label: 'Subjects', icon: Book },
+  { href: '/dashboard/admin/subjectgroups', label: 'Subject Groups', icon: Book },
   { href: '/dashboard/admin/rooms', label: 'Rooms', icon: Book },
   { href: '/dashboard/admin/users', label: 'Users', icon: Users },
   { href: '/dashboard/admin/settings', label: 'Settings', icon: Settings },
@@ -24,6 +25,7 @@ const adminNavItems = [
 const userNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/schedule', label: 'Schedule', icon: Calendar },
+  { href: '/complaints', label: 'Complaints', icon: MessageCircle },
   { href: '/profile', label: 'Profile', icon: User },
 ];
 

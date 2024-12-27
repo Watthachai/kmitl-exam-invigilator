@@ -36,7 +36,6 @@ export default function DepartmentsPage() {
           });
       
           if (!response.ok) throw new Error('Failed to add department');
-      
           const data = await response.json();
           setDepartments([...departments, data]);
           setNewDepartment('');
@@ -63,6 +62,7 @@ export default function DepartmentsPage() {
 
   return (
     <div className="p-6 space-y-6">
+      <Toaster/>
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Departments</h1>
         <button className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"

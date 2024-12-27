@@ -1,4 +1,3 @@
-// app/(auth)/login/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -14,12 +13,13 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { status } = useSession();
-  
+
   useEffect(() => {
+    console.log('status:', status);
     if (status === 'authenticated') {
       router.push('/dashboard');
     }
-  })
+  }, [status, router]); // Run only when `status` or `router` changes
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
