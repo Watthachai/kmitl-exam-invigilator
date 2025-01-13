@@ -15,12 +15,16 @@ export default function AdminDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    console.log("Session status:", status);
+    console.log("Session data:", session);
+    if (status === "loading") return; // Avoid redirecting while session status is loading
+
     if (status === "unauthenticated") {
       router.push("/login");
     } else if (status === "authenticated" && session?.user?.role !== "admin") {
-      router.push("/dashboard/");
+      router.push("/dashboard");
     } else {
-      setIsLoading(false);
+      setIsLoading(false); // Loading is complete when authenticated with admin role
     }
   }, [status, session, router]);
 
