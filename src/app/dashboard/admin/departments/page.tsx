@@ -13,26 +13,25 @@ interface Department {
 }
 
 export default function DepartmentsPage() {
-    const [departments, setDepartments] = useState<Department[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
 
-  //Add State
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [newDepartment, setNewDepartment] = useState('');
-  //Edit State
-    const [showEditModal, setShowEditModal] = useState(false);
-    const [editDepartment, setEditDepartment] = useState<Department | null>(null);
-  //Delete State
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
+  // Add State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newDepartment, setNewDepartment] = useState('');
+  // Edit State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editDepartment, setEditDepartment] = useState<Department | null>(null);
+  // Delete State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
 
-
-    //Add Department Handler Function
-    const handleAddDepartment = async () => {
-        try {
-          if (!newDepartment.trim()) {
-            toast.error('Department name is required');
-            return;
-          }
+  // Add Department Handler Function
+  const handleAddDepartment = async () => {
+    try {
+      if (!newDepartment.trim()) {
+        toast.error('Department name is required');
+        return;
+      }
       
           const response = await fetch('/api/departments', {
             method: 'POST',
@@ -52,7 +51,7 @@ export default function DepartmentsPage() {
           toast.error('Failed to add department');
           console.error(error);
         }
-      };
+  };
 
       //Edit Department Handler Function
       const handleEditDepartment = async () => {
@@ -119,8 +118,8 @@ export default function DepartmentsPage() {
   }, []);
 
   return (
-    <div className="p-6 space-y-6">
-      <Toaster/>
+    <div className="p-6">
+      <Toaster position="top-center" />
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Departments</h1>
         <button className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
