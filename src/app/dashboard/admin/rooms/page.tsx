@@ -34,6 +34,7 @@ export default function RoomsPage() {
       const data = await response.json();
       setRooms(data);
     } catch (error) {
+      console.error('Failed to fetch rooms:', error);
       toast.error('Failed to fetch rooms');
     }
   };
@@ -55,6 +56,7 @@ export default function RoomsPage() {
         toast.error('Failed to add room');
       }
     } catch (error) {
+      console.error('Failed to add room:', error);
       toast.error('Failed to add room');
     }
   };
@@ -80,6 +82,7 @@ export default function RoomsPage() {
         toast.error('Failed to update room');
       }
     } catch (error) {
+      console.error('Failed to update room:', error);
       toast.error('Failed to update room');
     }
   };
@@ -100,6 +103,7 @@ export default function RoomsPage() {
         toast.error('Failed to delete room');
       }
     } catch (error) {
+      console.error('Failed to delete room:', error);
       toast.error('Failed to delete room');
     }
   };

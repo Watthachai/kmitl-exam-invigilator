@@ -5,20 +5,24 @@ import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import toast, { Toaster } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
 
+interface Subject {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface Professor {
+  id: string;
+  name: string;
+}
+
 interface SubjectGroup {
   id: string;
   groupNumber: string;
   year: number;
   studentCount: number;
-  subject: {
-    id: string;
-    code: string;
-    name: string;
-  };
-  professor: {
-    id: string;
-    name: string;
-  };
+  subject: Subject;
+  professor: Professor;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,8 +33,8 @@ export default function SubjectGroupsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<SubjectGroup | null>(null);
-  const [subjects, setSubjects] = useState([]);
-  const [professors, setProfessors] = useState([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [professors, setProfessors] = useState<Professor[]>([]);
   const [formData, setFormData] = useState({
     groupNumber: '',
     year: new Date().getFullYear(),
@@ -233,7 +237,7 @@ const handleAddSubjectGroup = async () => {
                     required
                   >
                     <option value="">Select Subject</option>
-                    {subjects.map((subject: any) => (
+                    {subjects.map((subject: Subject) => (
                       <option key={subject.id} value={subject.id}>
                         {subject.code} - {subject.name}
                       </option>
@@ -249,7 +253,7 @@ const handleAddSubjectGroup = async () => {
                     required
                   >
                     <option value="">Select Professor</option>
-                    {professors.map((professor: any) => (
+                    {professors.map((professor: Professor) => (
                       <option key={professor.id} value={professor.id}>
                         {professor.name}
                       </option>
@@ -316,7 +320,7 @@ const handleAddSubjectGroup = async () => {
         required
       >
         <option value="">Select Subject</option>
-        {subjects.map((subject: any) => (
+        {subjects.map((subject: Subject) => (
           <option key={subject.id} value={subject.id}>
             {subject.code} - {subject.name}
           </option>
@@ -335,7 +339,7 @@ const handleAddSubjectGroup = async () => {
         required
       >
         <option value="">Select Professor</option>
-        {professors.map((professor: any) => (
+        {professors.map((professor: Professor) => (
           <option key={professor.id} value={professor.id}>
             {professor.name}
           </option>

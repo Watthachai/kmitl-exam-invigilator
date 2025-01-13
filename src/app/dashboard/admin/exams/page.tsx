@@ -4,7 +4,16 @@ import { useEffect, useState } from "react";
 import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import toast, { Toaster } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
+import { Invigilator } from "@prisma/client";
 
+interface SubjectGroup {
+  id: string;
+  groupNumber: string;
+  subject: {
+    code: string;
+    name: string;
+  };
+}
 interface Schedule {
   id: string;
   date: Date;
@@ -264,7 +273,7 @@ export default function ExamsPage() {
                   required
                 >
                   <option value="">Select Subject Group</option>
-                  {subjectGroups.map((group: any) => (
+                  {subjectGroups.map((group: SubjectGroup) => (
                     <option key={group.id} value={group.id}>
                       {group.subject.code} - {group.subject.name} (Group {group.groupNumber})
                     </option>
@@ -340,7 +349,7 @@ export default function ExamsPage() {
                     required
                   >
                     <option value="">Select Invigilator</option>
-                    {invigilators.map((invigilator: any) => (
+                    {invigilators.map((invigilator: Invigilator) => (
                       <option key={invigilator.id} value={invigilator.id}>
                         {invigilator.name}
                       </option>
@@ -374,7 +383,7 @@ export default function ExamsPage() {
                     required
                   >
                     <option value="">Select Subject Group</option>
-                    {subjectGroups.map((group: any) => (
+                    {subjectGroups.map((group: SubjectGroup) => (
                       <option key={group.id} value={group.id}>
                         {group.subject.code} - {group.subject.name} (Group {group.groupNumber})
                       </option>
@@ -393,7 +402,7 @@ export default function ExamsPage() {
                     required
                   >
                     <option value="">Select Invigilator</option>
-                    {invigilators.map((invigilator: any) => (
+                    {invigilators.map((invigilator: Invigilator) => (
                       <option key={invigilator.id} value={invigilator.id}>
                         {invigilator.name}
                       </option>
