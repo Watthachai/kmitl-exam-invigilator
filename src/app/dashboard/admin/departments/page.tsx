@@ -18,6 +18,13 @@ export default function DepartmentsPage() {
   //Add State
     const [showAddModal, setShowAddModal] = useState(false);
     const [newDepartment, setNewDepartment] = useState('');
+  //Edit State
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editDepartment, setEditDepartment] = useState<Department | null>(null);
+  //Delete State
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
+
 
     //Add Department Handler Function
     const handleAddDepartment = async () => {
@@ -46,6 +53,57 @@ export default function DepartmentsPage() {
           console.error(error);
         }
       };
+
+      //Edit Department Handler Function
+      const handleEditDepartment = async () => {
+        try {
+          if (!editDepartment) return;
+          const response = await fetch(`/api/departments/${editDepartment.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name: editDepartment.name }),
+          });
+      
+          if (!response.ok) throw new Error('Failed to update department');
+          const data = await response.json();
+          const updatedDepartments = departments.map((department) =>
+            department.id === data.id ? data : department
+          );
+          setDepartments(updatedDepartments);
+          setEditDepartment(null);
+          setShowEditModal(false);
+          toast.success('Department updated successfully');
+        } catch (error) {
+          toast.error('Failed to update department');
+          console.error(error);
+        }
+      }
+      
+      //Delete Department Handler Function
+      const deleteDepartment = async () => {
+        if (!selectedDepartment) return;
+        try {
+          const response = await fetch(`/api/departments/${selectedDepartment.id}`, {
+            method: 'DELETE',
+          });
+      
+          if (!response.ok) throw new Error('Failed to delete department');
+          const filteredDepartments = departments.filter(
+            (department) => department.id !== selectedDepartment.id
+          );
+          setDepartments(filteredDepartments);
+          setSelectedDepartment(null);
+          setShowDeleteModal(false);
+          toast.success('Department deleted successfully');
+        } catch (error) {
+          toast.error('Failed to delete department');
+          console.error(error);
+        }
+      };
+
+    
 
   useEffect(() => {
     const fetchDepartments = async () => {
@@ -97,10 +155,20 @@ export default function DepartmentsPage() {
                     </td>
                     <td className="px-6 py-4">
                         <div className="flex justify-end gap-2">
-                        <button className="flex items-center gap-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
+                        <button
+                        onClick={() => {
+                          setEditDepartment(department);
+                          setShowEditModal(true);
+                        }}
+                        className="flex items-center gap-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
                             <FiEdit2 className="w-4 h-4" />
                         </button>
-                        <button className="flex items-center gap-1 px-3 py-1 text-red-600 hover:bg-red-50 rounded-md transition-colors">
+                        <button
+                        onClick={() => {
+                          setSelectedDepartment(department);
+                          setShowDeleteModal(true);
+                        }}
+                        className="flex items-center gap-1 px-3 py-1 text-red-600 hover:bg-red-50 rounded-md transition-colors">
                             <FiTrash2 className="w-4 h-4" />
                         </button>
                         </div>
@@ -134,6 +202,42 @@ export default function DepartmentsPage() {
             </div>
         </PopupModal>
         )}
+
+        {showEditModal && (
+        <PopupModal
+            title="Edit Department"
+            onClose={() => setShowEditModal(false)}
+            onConfirm={handleEditDepartment}
+            confirmText="Update Department"
+        >
+            <div className="space-y-4">
+            <div>
+                <label className="block text-gray-700">Department Name</label>
+                <input
+                type="text"
+                value={editDepartment?.name}
+                onChange={(e) => editDepartment && setEditDepartment({ ...editDepartment, name: e.target.value } as Department)}
+                className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter department name"
+                />
+            </div>
+            </div>
+        </PopupModal>
+        )}
+
+        {showDeleteModal && selectedDepartment && (
+          <PopupModal
+            title="Delete Department"
+            onClose={() => setShowDeleteModal(false)}
+            onConfirm={deleteDepartment}
+            confirmText="Yes, Delete"
+            >
+            <p className="text-gray-700">
+            Are you sure you want to delete <strong>{selectedDepartment.name}</strong>?
+          </p>
+            </PopupModal>
+          )}
+
       </div>
     </div>
 
