@@ -5,23 +5,51 @@ import { parseExcelFile } from '@/app/lib/excel-wrapper';
 import { utils as XLSXUtils, write as XLSXWrite } from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 
-interface TableRow {
+interface TableData {
   [key: string]: string | number | null;
 }
 
-interface TableData {
-  [key: string]: any;
-}
-
-const EditableCell = ({ value, onChange }: { value: any; onChange: (value: any) => void }) => {
+const EditableCell = ({ value, onChange }: { value: string | number | null; onChange: (value: string) => void }) => {
   return (
     <input
       type="text"
-      value={value}
+      value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
       className="w-full p-2 border border-transparent hover:border-gray-300 focus:border-blue-500 rounded"
     />
   );
+};
+
+// Update the fillSequenceNumbers function
+const fillSequenceAndSubject = (data: TableData[]) => {
+  let currentNumber: number | null = null;
+  let currentSubject: string | number | null = null;
+  
+  return data.map((row, index) => {
+    // Check and update sequence number
+    const sequenceNum = Number(row["ลำดับ"]);
+    if (row["ลำดับ"] && !isNaN(sequenceNum) && sequenceNum > 0) {
+      currentNumber = sequenceNum;
+      console.log(`Found number: ${currentNumber} at row ${index}`);
+    }
+    
+    // Check and update subject
+    if (row["วิชา"] && row["วิชา"].toString().trim() !== '') {
+      currentSubject = row["วิชา"];
+      console.log(`Found subject: ${currentSubject} at row ${index}`);
+    }
+    
+    // Fill both sequence and subject if available
+    if (currentNumber !== null || currentSubject !== null) {
+      return {
+        ...row,
+        "ลำดับ": currentNumber || row["ลำดับ"],
+        "วิชา": currentSubject || row["วิชา"]
+      };
+    }
+    
+    return row;
+  });
 };
 
 export default function TableImportPage() {
@@ -41,29 +69,27 @@ export default function TableImportPage() {
     }
   };
 
-  const handleCellChange = (rowIndex: number, columnName: string, value: any) => {
-    const newData = [...editedData];
-    newData[rowIndex][columnName] = value;
-    setEditedData(newData);
-  };
-
   const handleSaveChanges = () => {
-    setTableData(editedData);
+    const savedData = [...editedData]; // Keep filled data
+    setTableData(savedData);
     setIsEditing(false);
     toast.success('Changes saved successfully');
   };
-
+  
   const handleExport = () => {
     try {
-      const ws = XLSXUtils.json_to_sheet(tableData);
+      // Use the latest data (including filled data)
+      const currentData = isEditing ? editedData : tableData;
+      
+      const ws = XLSXUtils.json_to_sheet(currentData);
       const wb = XLSXUtils.book_new();
       XLSXUtils.book_append_sheet(wb, ws, 'Sheet1');
       
-      // Generate Excel file
       const excelBuffer = XLSXWrite(wb, { bookType: 'xlsx', type: 'array' });
-      const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const data = new Blob([excelBuffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
       
-      // Create download link
       const url = window.URL.createObjectURL(data);
       const link = document.createElement('a');
       link.href = url;
@@ -75,6 +101,24 @@ export default function TableImportPage() {
       console.error('Error exporting file:', error);
       toast.error('Failed to export table');
     }
+  };
+
+  // Update the button click handler
+  const handleFillData = () => {
+    const filledData = fillSequenceAndSubject([...editedData]);
+    setEditedData(filledData);
+    setTableData(filledData); // Update tableData immediately
+    console.log('Updated data:', filledData);
+    toast.success('Data filled successfully');
+  };
+
+  const handleCellChange = (rowIndex: number, key: string, newValue: string) => {
+    const updatedData = [...editedData];
+    updatedData[rowIndex] = {
+      ...updatedData[rowIndex],
+      [key]: newValue
+    };
+    setEditedData(updatedData);
   };
 
   return (
@@ -101,6 +145,13 @@ export default function TableImportPage() {
               >
                 Export to Excel
               </button>
+              <button
+              onClick={handleFillData}
+              className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
+              disabled={!isEditing || editedData.length === 0}
+            >
+              Fill Sequence & Subject
+            </button>
             </>
           )}
         </div>
