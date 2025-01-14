@@ -7,7 +7,7 @@ export async function PUT(
 ) {
     try {
         const { id } = await params;
-        const { subjectGroupId, date, startTime, endTime, building, roomNumber, invigilatorId } = await request.json();
+        const { date, startTime, endTime, roomId, subjectGroupId, invigilatorId } = await request.json();
 
         const updatedSchedule = await prisma.schedule.update({
             where: { id },
@@ -15,12 +15,12 @@ export async function PUT(
                 date: new Date(date),
                 startTime: new Date(startTime),
                 endTime: new Date(endTime),
-                building,
-                roomNumber,
+                room: { connect: { id: roomId } },
                 subjectGroup: { connect: { id: subjectGroupId } },
                 invigilator: { connect: { id: invigilatorId } },
             },
             include: {
+                room: true,
                 subjectGroup: {
                     include: {
                         subject: true,

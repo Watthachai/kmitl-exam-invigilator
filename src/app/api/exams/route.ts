@@ -21,31 +21,31 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  try {
-    const { subjectGroupId, date, startTime, endTime, building, roomNumber, invigilatorId } = await request.json();
-    
-    const schedule = await prisma.schedule.create({
-      data: {
-        date: new Date(date),
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
-        building,
-        roomNumber,
-        subjectGroup: { connect: { id: subjectGroupId } },
-        invigilator: { connect: { id: invigilatorId } },
-      },
-      include: {
-        subjectGroup: {
-          include: {
-            subject: true,
-          },
+    try {
+        const { date, startTime, endTime, roomId, subjectGroupId, invigilatorId } = await request.json();
+        
+        const schedule = await prisma.schedule.create({
+        data: {
+            date: new Date(date),
+            startTime: new Date(startTime),
+            endTime: new Date(endTime),
+            room: { connect: { id: roomId } },
+            subjectGroup: { connect: { id: subjectGroupId } },
+            invigilator: { connect: { id: invigilatorId } },
         },
-        invigilator: true,
-      },
-    });
-    return NextResponse.json(schedule);
-  } catch (error) {
-    console.error('Error creating schedule:', error);
-    return NextResponse.json({ error: 'Failed to create schedule' }, { status: 500 });
+        include: {
+            room: true,
+            subjectGroup: {
+            include: {
+                subject: true,
+            },
+        },
+            invigilator: true,
+        },
+      });
+        return NextResponse.json(schedule);
+    } catch (error) {
+        console.error('Error creating schedule:', error);
+        return NextResponse.json({ error: 'Failed to create schedule' }, { status: 500 });
+    }
   }
-}

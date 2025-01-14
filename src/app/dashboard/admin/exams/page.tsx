@@ -14,13 +14,21 @@ interface SubjectGroup {
     name: string;
   };
 }
-interface Schedule {
+interface Room {
   id: string;
-  date: Date;
-  startTime: Date;
-  endTime: Date;
   building: string;
   roomNumber: string;
+}
+interface Schedule {
+  id: string;
+  date: Date;        // @db.Date
+  startTime: Date;   // @db.Time
+  endTime: Date;     // @db.Time
+  room: {
+    id: string;
+    building: string;
+    roomNumber: string;
+  };
   subjectGroup: {
     id: string;
     groupNumber: string;
@@ -46,13 +54,13 @@ export default function ExamsPage() {
   const [editSchedule, setEditSchedule] = useState<Schedule | null>(null);
   const [subjectGroups, setSubjectGroups] = useState([]);
   const [invigilators, setInvigilators] = useState([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [formData, setFormData] = useState({
     subjectGroupId: '',
     date: '',
     startTime: '',
     endTime: '',
-    building: '',
-    roomNumber: '',
+    roomId: '',
     invigilatorId: ''
   });
 
@@ -90,41 +98,72 @@ export default function ExamsPage() {
     fetchFormData();
   }, []);
 
+  useEffect(() => {
+    fetchRooms();
+  }, []);
+
+  const fetchRooms = async () => {
+    try {
+      const response = await fetch('/api/rooms');
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch rooms');
+      }
+      
+      setRooms(result.data);
+    } catch (error) {
+      console.error('Failed to fetch rooms:', error);
+      toast.error('Failed to fetch rooms');
+    }
+  };
+
   const handleAddSchedule = async () => {
     try {
+      if (!formData.subjectGroupId || !formData.date || !formData.startTime || 
+          !formData.endTime || !formData.roomId || !formData.invigilatorId) {
+        toast.error('Please fill all required fields');
+        return;
+      }
+  
+      // Format dates to match Prisma schema
+      const dateOnly = new Date(formData.date).toISOString().split('T')[0];
+      const startDateTime = new Date(`${dateOnly}T${formData.startTime}:00`);
+      const endDateTime = new Date(`${dateOnly}T${formData.endTime}:00`);
+  
       const response = await fetch('/api/schedules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subjectGroupId: formData.subjectGroupId,
-          date: formData.date,
-          startTime: formData.startTime,
-          endTime: formData.endTime,
-          building: formData.building,
-          roomNumber: formData.roomNumber,
+          date: dateOnly,
+          startTime: startDateTime.toISOString(),
+          endTime: endDateTime.toISOString(),
+          roomId: formData.roomId,
           invigilatorId: formData.invigilatorId
         }),
       });
-
-      if (response.ok) {
-        toast.success('Exam schedule added successfully');
-        setShowAddModal(false);
-        setFormData({
-          subjectGroupId: '',
-          date: '',
-          startTime: '',
-          endTime: '',
-          building: '',
-          roomNumber: '',
-          invigilatorId: ''
-        });
-        fetchSchedules();
-      } else {
-        toast.error('Failed to add exam schedule');
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create schedule');
       }
+  
+      await response.json();
+      toast.success('Exam schedule added successfully');
+      setShowAddModal(false);
+      setFormData({
+        subjectGroupId: '',
+        date: '',
+        startTime: '',
+        endTime: '',
+        roomId: '',
+        invigilatorId: ''
+      });
+      fetchSchedules();
     } catch (error) {
-      console.error('Error adding exam schedule:', error);
-      toast.error('Failed to add exam schedule');
+      console.error('Error adding schedule:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to add schedule');
     }
   };
 
@@ -140,8 +179,7 @@ export default function ExamsPage() {
           date: editSchedule.date,
           startTime: editSchedule.startTime,
           endTime: editSchedule.endTime,
-          building: editSchedule.building,
-          roomNumber: editSchedule.roomNumber,
+          roomId: editSchedule.room.id,
           invigilatorId: editSchedule.invigilator.id
         }),
       });
@@ -224,7 +262,7 @@ export default function ExamsPage() {
                     {new Date(schedule.endTime).toLocaleTimeString()}
                   </td>
                   <td className="px-6 py-4">
-                    {schedule.building} Room {schedule.roomNumber}
+                    {schedule.room.building} Room {schedule.room.roomNumber}
                   </td>
                   <td className="px-6 py-4">{schedule.invigilator.name}</td>
                   <td className="px-6 py-4">
@@ -316,30 +354,24 @@ export default function ExamsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-700">Building</label>
-                  <input
-                    type="text"
-                    value={formData.building}
-                    onChange={(e) => setFormData({ ...formData, building: e.target.value })}
-                    className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter building"
+                  <label className="block text-gray-700">Room</label>
+                  <select
+                    value={formData.roomId}
+                    onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
                     required
-                  />
+                  >
+                    <option value="">Select Room</option>
+                    {rooms.map((room) => (
+                      <option key={room.id} value={room.id}>
+                        {room.building} - {room.roomNumber}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-700">Room Number</label>
-                  <input
-                    type="text"
-                    value={formData.roomNumber}
-                    onChange={(e) => setFormData({ ...formData, roomNumber: e.target.value })}
-                    className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter room number"
-                    required
-                  />
-                </div>
                 <div>
                   <label className="block text-gray-700">Invigilator</label>
                   <select
@@ -458,10 +490,10 @@ export default function ExamsPage() {
                   <label className="block text-gray-700">Building</label>
                   <input
                     type="text"
-                    value={editSchedule.building}
+                    value={editSchedule.room.building}
                     onChange={(e) => setEditSchedule({
                       ...editSchedule,
-                      building: e.target.value
+                      room: { ...editSchedule.room, building: e.target.value }
                     })}
                     className="w-full border border-gray-300 p-2 rounded-md"
                     required
@@ -471,10 +503,10 @@ export default function ExamsPage() {
                   <label className="block text-gray-700">Room Number</label>
                   <input
                     type="text"
-                    value={editSchedule.roomNumber}
+                    value={editSchedule.room.roomNumber}
                     onChange={(e) => setEditSchedule({
                       ...editSchedule,
-                      roomNumber: e.target.value
+                      room: { ...editSchedule.room, roomNumber: e.target.value }
                     })}
                     className="w-full border border-gray-300 p-2 rounded-md"
                     required
