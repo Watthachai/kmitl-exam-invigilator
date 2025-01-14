@@ -52,9 +52,10 @@ const fillSequenceAndSubject = (data: TableData[]) => {
   });
 };
 
-export default function TableImportPage() {
+export default function TableView() {
   const [tableData, setTableData] = useState<TableData[]>([]);
   const [editedData, setEditedData] = useState<TableData[]>([]);
+  const [originalData, setOriginalData] = useState<TableData[]>([]); // Add this
   const [isEditing, setIsEditing] = useState(false);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,8 +122,23 @@ export default function TableImportPage() {
     setEditedData(updatedData);
   };
 
+  // Update edit button click handler
+  const handleEditClick = () => {
+    setOriginalData([...tableData]); // Backup original data
+    setEditedData([...tableData]);
+    setIsEditing(true);
+  };
+
+  // Update cancel button click handler
+  const handleCancelEdit = () => {
+    setTableData([...originalData]); // Restore original data
+    setEditedData([]);
+    setOriginalData([]);
+    setIsEditing(false);
+  };
+
   return (
-    <div className="p-6">
+    <div className="p-6 space-y-6">
       <Toaster />
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Table Import Page</h1>
@@ -130,10 +146,7 @@ export default function TableImportPage() {
           {tableData.length > 0 && (
             <>
               <button
-                onClick={() => {
-                  setEditedData([...tableData]);
-                  setIsEditing(true);
-                }}
+                onClick={() => handleEditClick()}
                 className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
                 disabled={isEditing}
               >
@@ -173,48 +186,47 @@ export default function TableImportPage() {
 
       {tableData.length > 0 && (
         <>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  {Object.keys(tableData[0]).map((header) => (
-                    <th
-                      key={header}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {(isEditing ? editedData : tableData).map((row, rowIndex) => (
-                  <tr key={rowIndex}>
-                    {Object.entries(row).map(([key, value], cellIndex) => (
-                      <td key={`${rowIndex}-${cellIndex}`} className="px-6 py-4 whitespace-nowrap">
-                        {isEditing ? (
-                          <EditableCell
-                            value={value}
-                            onChange={(newValue) => handleCellChange(rowIndex, key, newValue)}
-                          />
-                        ) : (
-                          value
-                        )}
-                      </td>
+          <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100">
+            <div className="max-h-[70vh] overflow-auto">
+              <table className="w-full border-collapse">
+                <thead className="bg-white/95 backdrop-blur-sm sticky top-0 z-10">
+                  <tr className="border-b border-gray-100">
+                    {Object.keys(tableData[0]).map((header) => (
+                      <th
+                        key={header}
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        {header}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(isEditing ? editedData : tableData).map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {Object.entries(row).map(([key, value], cellIndex) => (
+                        <td key={`${rowIndex}-${cellIndex}`} className="px-6 py-4 whitespace-nowrap">
+                          {isEditing ? (
+                            <EditableCell
+                              value={value}
+                              onChange={(newValue) => handleCellChange(rowIndex, key, newValue)}
+                            />
+                          ) : (
+                            value
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {isEditing && (
             <div className="mt-4 flex justify-end space-x-2">
               <button
-                onClick={() => {
-                  setIsEditing(false);
-                  setEditedData([]);
-                }}
+                onClick={handleCancelEdit}
                 className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
               >
                 Cancel
