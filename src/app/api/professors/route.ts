@@ -13,9 +13,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { name } = await request.json();
+    const { name, department } = await request.json();
     const professor = await prisma.professor.create({
-      data: { name },
+      data: { name, department },
     });
     return NextResponse.json(professor);
   } catch (error) {

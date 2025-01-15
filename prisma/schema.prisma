@@ -105,13 +105,17 @@ model Invigilator {
 model Professor {
   id            String         @id @default(cuid()) @map("ProfessorID")
   name          String
+  department    Department     @relation(fields: [departmentId], references: [id])
+  departmentId  String
   subjectGroups SubjectGroup[]
-  invigilator   Invigilator[] // One professor can be an invigilator
+  invigilator   Invigilator[]
   messages      Message[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  userId        String?    @unique // Link to User
-  user          User?      @relation(fields: [userId], references: [id])
+  userId        String?        @unique
+  user          User?          @relation(fields: [userId], references: [id])
+
+  @@index([departmentId])
 }
 
 model Schedule {
@@ -134,11 +138,12 @@ model Schedule {
 }
 
 model Department {
-  id       String    @id @default(cuid()) @map("DepartmentID")
-  name     String
-  subjects Subject[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id         String      @id @default(cuid()) @map("DepartmentID")
+  name       String
+  subjects   Subject[]
+  professors Professor[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 }
 
 model Message {
