@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Invigilator" ADD COLUMN     "assignedQuota" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "quota" INTEGER NOT NULL DEFAULT 4;

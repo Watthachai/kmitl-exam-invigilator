@@ -92,7 +92,7 @@ model SubjectGroup {
 model Invigilator {
   id          String     @id @default(cuid()) @map("InvigilatorID")
   name        String
-  type        String     @default("INTERNAL") // INTERNAL, EXTERNAL, STAFF
+  type        String     @default("INTERNAL") // INTERNAL(Can be GenED, Education and employee of bla bla bla department or faculty), MANAGER(HEAD OF DEPARTMENT), PROFESSOR, HEAD_PROFESSOR(HEAD OF FACULTY)
   professorId String?    // Optional link to professor if internal
   professor   Professor? @relation(fields: [professorId], references: [id])
   schedules   Schedule[]
@@ -100,6 +100,9 @@ model Invigilator {
   updatedAt   DateTime   @updatedAt
   userId      String?    @unique // Link to User
   user        User?      @relation(fields: [userId], references: [id])
+
+  quota       Int        @default(4)
+  assignedQuota Int      @default(0)
 }
 
 model Professor {

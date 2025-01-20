@@ -118,7 +118,7 @@ export default function DepartmentsPage() {
   }, []);
 
   return (
-    <div className="p-6">
+    <div className="p-6 space-y-6">
       <Toaster position="top-center" />
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Departments</h1>

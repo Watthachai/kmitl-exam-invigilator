@@ -22,3 +22,36 @@ export interface Activity {
       percentage: number;
     };
   }
+
+
+export interface ProcessedData {
+
+  subject: {
+
+    code: string;
+
+    name: string;
+
+  };
+
+  room: {
+
+    building: string;
+
+    roomNumber: string;
+
+  };
+
+  professors: string[];
+
+  subjectGroup: {
+
+    groupNumber: string;
+
+    year: number;
+
+    studentCount: number;
+
+  };
+
+}

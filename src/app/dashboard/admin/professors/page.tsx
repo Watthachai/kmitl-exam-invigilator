@@ -5,25 +5,48 @@ import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import toast, { Toaster } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
 
+interface Department {
+  id: string;
+  name: string;
+}
+
 interface Professor {
   id: string;
   name: string;
+  department: Department;
+  departmentId: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export default function ProfessorsPage() {
   const [professors, setProfessors] = useState<Professor[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedProfessor, setSelectedProfessor] = useState<Professor | null>(null);
   const [editProfessor, setEditProfessor] = useState<Professor | null>(null);
-  const [newProfessor, setNewProfessor] = useState('');
+  const [formData, setFormData] = useState({
+    name: '',
+    departmentId: ''
+  });
 
   useEffect(() => {
     fetchProfessors();
+    fetchDepartments();
   }, []);
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await fetch('/api/departments');
+      const data = await response.json();
+      setDepartments(data);
+    } catch (error) {
+      console.error('Failed to fetch departments:', error);
+      toast.error('Failed to fetch departments');
+    }
+  };
 
   const fetchProfessors = async () => {
     try {
@@ -38,16 +61,24 @@ export default function ProfessorsPage() {
 
   const handleAddProfessor = async () => {
     try {
+      if (!formData.name.trim() || !formData.departmentId) {
+        toast.error('Professor name and department are required');
+        return;
+      }
+
       const response = await fetch('/api/professors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newProfessor }),
+        body: JSON.stringify(formData),
       });
+
       if (response.ok) {
         toast.success('Professor added successfully');
         setShowAddModal(false);
-        setNewProfessor('');
+        setFormData({ name: '', departmentId: '' });
         fetchProfessors();
+      } else {
+        toast.error('Failed to add professor');
       }
     } catch (error) {
       console.error('Failed to add professor:', error);
@@ -111,6 +142,7 @@ export default function ProfessorsPage() {
               <tr className="border-b border-gray-100">
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Professor ID</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Name</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Department</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Created At</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Updated At</th>
                 <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">Actions</th>
@@ -121,6 +153,7 @@ export default function ProfessorsPage() {
                 <tr key={professor.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">{professor.id}</td>
                   <td className="px-6 py-4">{professor.name}</td>
+                  <td className="px-6 py-4">{professor.department.name}</td>
                   <td className="px-6 py-4">
                     {new Date(professor.createdAt).toLocaleDateString()}
                   </td>
@@ -167,11 +200,27 @@ export default function ProfessorsPage() {
                 <label className="block text-gray-700">Professor Name</label>
                 <input
                   type="text"
-                  value={newProfessor}
-                  onChange={(e) => setNewProfessor(e.target.value)}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter professor name"
                 />
+              </div>
+              <div>
+                <label className="block text-gray-700">Department</label>
+                <select
+                  value={formData.departmentId}
+                  onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
+                  className="w-full border border-gray-300 p-2 rounded-md"
+                  required
+                >
+                  <option value="">Select Department</option>
+                  {departments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </PopupModal>
