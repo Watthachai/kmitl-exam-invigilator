@@ -1,24 +1,37 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 import prisma from '@/app/lib/prisma';
 
 export async function PUT(
-    request: Request,
-    { params }: { params: Promise<{ id: string }> }
+  request: Request,
+  { params }: { params: { id: string } }
 ) {
-    try {
-        const { id } = await params;
-        const { name } = await request.json();
+  try {
+    const body = await request.json();
+    const { name, departmentId } = body;
 
-        const updatedProfessor = await prisma.professor.update({
-            where: { id },
-            data: { name },
-        });
+    const professor = await prisma.professor.update({
+      where: {
+        id: params.id
+      },
+      data: {
+        name,
+        department: {
+          connect: { id: departmentId }
+        }
+      },
+      include: {
+        department: true
+      }
+    });
 
-        return NextResponse.json(updatedProfessor);
-    } catch (error) {
-        console.error("Error updating professor:", error);
-        return NextResponse.json({ error: 'Failed to update professor' }, { status: 500 });
-    }
+    return NextResponse.json(professor);
+  } catch (error) {
+    console.error('Error updating professor:', error);
+    return NextResponse.json(
+      { error: 'Failed to update professor' },
+      { status: 500 }
+    );
+  }
 }
 
 export async function DELETE(

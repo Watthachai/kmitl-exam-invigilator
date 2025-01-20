@@ -51,8 +51,10 @@ export default function ProfessorsPage() {
   const fetchProfessors = async () => {
     try {
       const response = await fetch('/api/professors');
-      const data = await response.json();
-      setProfessors(data);
+      if (response.ok) {
+        const data = await response.json();
+        setProfessors(data);
+      }
     } catch (error) {
       console.error('Failed to fetch professors:', error);
       toast.error('Failed to fetch professors');
@@ -61,24 +63,21 @@ export default function ProfessorsPage() {
 
   const handleAddProfessor = async () => {
     try {
-      if (!formData.name.trim() || !formData.departmentId) {
-        toast.error('Professor name and department are required');
+      if (!formData.name || !formData.departmentId) {
+        toast.error('Please fill all required fields');
         return;
       }
-
+  
       const response = await fetch('/api/professors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-
       if (response.ok) {
         toast.success('Professor added successfully');
         setShowAddModal(false);
         setFormData({ name: '', departmentId: '' });
         fetchProfessors();
-      } else {
-        toast.error('Failed to add professor');
       }
     } catch (error) {
       console.error('Failed to add professor:', error);
@@ -92,7 +91,10 @@ export default function ProfessorsPage() {
       const response = await fetch(`/api/professors/${editProfessor.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editProfessor.name }),
+        body: JSON.stringify({
+          name: editProfessor.name,
+          departmentId: editProfessor.departmentId
+        }),
       });
       if (response.ok) {
         toast.success('Professor updated successfully');
@@ -189,42 +191,42 @@ export default function ProfessorsPage() {
         </div>
 
         {showAddModal && (
-          <PopupModal
-            title="Add New Professor"
-            onClose={() => setShowAddModal(false)}
-            onConfirm={handleAddProfessor}
-            confirmText="Add Professor"
-          >
-            <div className="space-y-4">
-              <div>
-                <label className="block text-gray-700">Professor Name</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter professor name"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700">Department</label>
-                <select
-                  value={formData.departmentId}
-                  onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
-                  className="w-full border border-gray-300 p-2 rounded-md"
-                  required
-                >
-                  <option value="">Select Department</option>
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        <PopupModal
+          title="Add New Professor"
+          onClose={() => setShowAddModal(false)}
+          onConfirm={handleAddProfessor}
+          confirmText="Add Professor"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-gray-700">Professor Name</label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter professor name"
+              />
             </div>
-          </PopupModal>
-        )}
+            <div>
+              <label className="block text-gray-700">Department</label>
+              <select
+                value={formData.departmentId}
+                onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
+                className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">Select Department</option>
+                {departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </PopupModal>
+      )}
 
         {showEditModal && editProfessor && (
           <PopupModal
