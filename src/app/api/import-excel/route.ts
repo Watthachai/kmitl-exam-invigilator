@@ -10,15 +10,27 @@ export async function POST(request: Request) {
     const importResults = await processExcelData(jsonData);
 
     return NextResponse.json({ message: 'Data import process started.', results: importResults }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error processing data in API route:', error);
-    return NextResponse.json({ error: 'Failed to process data', details: error.message }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    return NextResponse.json({ error: 'Failed to process data', details: errorMessage }, { status: 500 });
   } finally {
     await prisma.$disconnect();
   }
 }
 
-async function processExcelData(data: any[]) {
+interface ExcelRow {
+  'วิชา': string;
+  'กลุ่ม': string;
+  'ชั้นปี': string;
+  'นศ.': string;
+  'ผู้สอน': string;
+  'อาคาร': string;
+  'ห้อง': string;
+  'เวลา': string;
+}
+
+async function processExcelData(data: ExcelRow[]) {
   const results = [];
 
   for (const row of data) {
@@ -27,7 +39,7 @@ async function processExcelData(data: any[]) {
       const subjectGroupResult = await processSubjectGroup(row['กลุ่ม'] as string, row['ชั้นปี'] as string, row['นศ.'] as string, subjectResult?.subject?.id);
       const professorResults = await processProfessors(row['ผู้สอน'] as string, subjectGroupResult?.subjectGroup?.id);
       const roomResult = await processRoom(row['อาคาร'] as string, row['ห้อง'] as string);
-      const scheduleResult = await processSchedule(row['เวลา'] as string, subjectGroupResult?.subjectGroup?.id, roomResult?.room?.id, professorResults.map(p => p.professor?.id).filter(Boolean));
+      const scheduleResult = await processSchedule(row['เวลา'] as string, subjectGroupResult?.subjectGroup?.id, roomResult?.room?.id, professorResults.map(p => p.professor?.id).filter((id): id is string => id !== undefined));
 
       results.push({
         row,
@@ -37,9 +49,9 @@ async function processExcelData(data: any[]) {
         room: roomResult,
         schedulePrompt: scheduleResult,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error processing row:', row, error);
-      results.push({ row, error: error.message });
+      results.push({ row, error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 
@@ -68,12 +80,13 @@ async function processSubject(subjectString: string) {
       data: {
         code,
         name,
-        departmentId: 'YOUR_DEFAULT_DEPARTMENT_ID', // Replace with a valid department ID
+        departmentId: 'cm64ka9s30008pci4lzrxe5hd', // Replace with a valid department ID
       },
     });
     return { status: 'Subject created', subject };
-  } catch (error: any) {
-    return { error: `Failed to create/find subject: ${error.message}` };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { error: `Failed to create/find subject: ${errorMessage}` };
   }
 }
 
@@ -101,12 +114,13 @@ async function processSubjectGroup(groupNumber: string, year: string, studentCou
         year: parseInt(year),
         studentCount: parseInt(studentCount),
         subjectId,
-        professorId: 'TEMP_PROFESSOR_ID', // Temporary ID, will be updated
+        professorId: 'cm64r9fo4009p6qwjv7fb9sy4', // Temporary ID, will be updated
       },
     });
     return { status: 'SubjectGroup created', subjectGroup };
-  } catch (error: any) {
-    return { error: `Failed to create/find SubjectGroup: ${error.message}` };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { error: `Failed to create/find SubjectGroup: ${errorMessage}` };
   }
 }
 
@@ -132,7 +146,7 @@ async function processProfessors(professorsString: string, subjectGroupId?: stri
         professor = await prisma.professor.create({
           data: {
             name,
-            departmentId: 'YOUR_DEFAULT_DEPARTMENT_ID', // Replace with a valid department ID
+            departmentId: 'cm64ka9s30008pci4lzrxe5hd', // Replace with a valid department ID
           },
         });
         results.push({ status: 'Professor created', professor });
@@ -144,8 +158,9 @@ async function processProfessors(professorsString: string, subjectGroupId?: stri
         data: { professorId: professor.id },
       });
 
-    } catch (error: any) {
-      results.push({ error: `Failed to create/find professor ${name}: ${error.message}` });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      results.push({ error: `Failed to create/find professor ${name}: ${errorMessage}` });
     }
   }
 
@@ -178,8 +193,9 @@ async function processRoom(building: string, roomNumber: string) {
       },
     });
     return { status: 'Room created', room };
-  } catch (error: any) {
-    return { error: `Failed to create/find Room: ${error.message}` };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { error: `Failed to create/find Room: ${errorMessage}` };
   }
 }
 
@@ -193,8 +209,8 @@ async function processSchedule(timeString: string, subjectGroupId?: string, room
     return { error: `Could not parse time string: ${timeString}` };
   }
 
-  const startTime = new Date(`2023-01-01T${startTimeString}`); // Using a dummy date
-  const endTime = new Date(`2023-01-01T${endTimeString}`);     // Using a dummy date
+  //const startTime = new Date(`2023-01-01T${startTimeString}`); // Using a dummy date
+  //const endTime = new Date(`2023-01-01T${endTimeString}`);   // Using a dummy date
 
   if (!subjectGroupId || !roomId || !professorIds || professorIds.length === 0) {
     return { error: 'Missing data for Schedule creation' };
