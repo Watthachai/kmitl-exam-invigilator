@@ -144,8 +144,8 @@ const confirmSaveToDatabase = () => {
   startTransition(async () => {
     const dataToSave = isEditing ? editedData : tableData;
     
-    if (!scheduleDateOption) {
-      toast.error('Please select a schedule option (morning/afternoon)');
+    if (!scheduleDateOption || !selectedDate) {
+      toast.error('Please select both date and schedule option');
       return;
     }
 
@@ -155,7 +155,8 @@ const confirmSaveToDatabase = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           data: dataToSave,
-          scheduleOption: scheduleDateOption
+          scheduleOption: scheduleDateOption,
+          examDate: selectedDate.toISOString()
         })
       });
 
@@ -168,6 +169,7 @@ const confirmSaveToDatabase = () => {
       toast.success('Data imported successfully');
       setShowDatePrompt(false);
       setScheduleDateOption(null);
+      setSelectedDate(null);
 
     } catch (error) {
       console.error('Save failed:', error);

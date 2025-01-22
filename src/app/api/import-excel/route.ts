@@ -4,7 +4,7 @@ import { ExamData } from '@/app/types';
 
 interface ImportRequest {
   data: ExamData[];
-  scheduleOption: 'ช่วงเช้า'| 'ช่วงบ่าย';
+  scheduleOption: 'ช่วงเช้า' | 'ช่วงบ่าย';
   examDate: string;
 }
 
@@ -104,9 +104,23 @@ export async function POST(request: Request) {
   try {
     const body = await request.json() as ImportRequest;
     
-    if (!body?.data || !body?.scheduleOption || !body?.examDate || !['ช่วงเช้า', 'ช่วงบ่าย'].includes(body.scheduleOption)) {
-      return NextResponse.json({ 
-        error: 'Missing or invalid required fields' 
+    // Validate required fields
+    if (!body?.data?.length) {
+      return NextResponse.json({ error: 'Missing exam data' }, { status: 400 });
+    }
+    if (!body.scheduleOption) {
+      return NextResponse.json({ error: 'Missing schedule option' }, { status: 400 });
+    }
+    if (!body.examDate) {
+      return NextResponse.json({ error: 'Missing exam date' }, { status: 400 });
+    }
+
+    // Validate each exam data entry
+    const invalidRows = body.data.filter(row => !validateExamData(row));
+    if (invalidRows.length > 0) {
+      return NextResponse.json({
+        error: 'Invalid exam data entries found',
+        invalidRows
       }, { status: 400 });
     }
 
@@ -129,4 +143,17 @@ export async function POST(request: Request) {
       details: errorMessage
     }, { status: 500 });
   }
+}
+
+function validateExamData(data: ExamData): boolean {
+  return !!(
+    data.วิชา?.trim() &&
+    data.กลุ่ม?.trim() &&
+    data['ชั้นปี']?.trim() &&
+    data['นศ.']?.trim() &&
+    data.เวลา?.trim() &&
+    data['ผู้สอน']?.trim() &&
+    data.อาคาร?.trim() &&
+    data.ห้อง?.trim()
+  );
 }
