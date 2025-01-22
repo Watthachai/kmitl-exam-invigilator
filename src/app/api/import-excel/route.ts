@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/app/lib/prisma';
 import { ExamData } from '@/app/types/exam';
+import { normalizeTime } from '@/app/utils/dateTimeHelper';
 
 async function processExamData(examData: ExamData[], scheduleOption: 'morning' | 'afternoon') {
     return await prisma.$transaction(async (tx) => {
@@ -69,13 +70,16 @@ async function processExamData(examData: ExamData[], scheduleOption: 'morning' |
           });
   
           // Process Schedule
-          const [startTime, endTime] = row.เวลา.split(' - ');
+          const [startTimeStr, endTimeStr] = row.เวลา.split(' - ');
+          const normalizedStartTime = normalizeTime(startTimeStr);
+          const normalizedEndTime = normalizeTime(endTimeStr);
+  
           await tx.schedule.create({
             data: {
               date: new Date(),
               scheduleDateOption: scheduleOption.toUpperCase(),
-              startTime: new Date(`1970-01-01T${startTime}`),
-              endTime: new Date(`1970-01-01T${endTime}`),
+              startTime: new Date(`1970-01-01T${normalizedStartTime}`),
+              endTime: new Date(`1970-01-01T${normalizedEndTime}`),
               roomId: room.id,
               subjectGroupId: subjectGroup.id,
               invigilatorId: 'cm64k02750001pci491acindo'
