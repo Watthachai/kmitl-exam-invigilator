@@ -55,6 +55,7 @@ export default function TablePage() {
   const [scheduleDateOption, setScheduleDateOption] = useState<'ช่วงเช้า' | 'ช่วงบ่าย' | null>(null);
   const [showDatePrompt, setShowDatePrompt] = useState(false);
   const [isPending, startTransition] = useTransition(); // For handling loading states during server actions
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -293,27 +294,50 @@ const confirmSaveToDatabase = () => {
       {showDatePrompt && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center">
           <div className="bg-white rounded-lg p-8 max-w-sm space-y-4">
-            <h2 className="text-lg font-bold">Select Schedule Date Option</h2>
+            <h2 className="text-lg font-bold">Select Schedule Options</h2>
+            
+            {/* Add Date Picker */}
             <div className="space-y-2">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  value="morning"
-                  checked={scheduleDateOption === 'ช่วงเช้า'}
-                  onChange={() => setScheduleDateOption('ช่วงเช้า')}
-                />
-                <span>ช่วงเช้า Schedule</span>
+              <label className="block text-sm font-medium text-gray-700">
+                Select Date
               </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  value="afternoon"
-                  checked={scheduleDateOption === 'ช่วงบ่าย'}
-                  onChange={() => setScheduleDateOption('ช่วงบ่าย')}
-                />
-                <span>ช่วงบ่าย Schedule</span>
-              </label>
+              <input
+                type="date"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                value={selectedDate ? selectedDate.toISOString().split('T')[0] : ''}
+                onChange={(e) => setSelectedDate(new Date(e.target.value))}
+                required
+              />
             </div>
+
+            {/* Existing Time Options */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Select Time Slot
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    value="morning"
+                    checked={scheduleDateOption === 'ช่วงเช้า'}
+                    onChange={() => setScheduleDateOption('ช่วงเช้า')}
+                  />
+                  <span>ช่วงเช้า Schedule</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    value="afternoon"
+                    checked={scheduleDateOption === 'ช่วงบ่าย'}
+                    onChange={() => setScheduleDateOption('ช่วงบ่าย')}
+                  />
+                  <span>ช่วงบ่าย Schedule</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
             <div className="flex justify-end space-x-2">
               <button
                 onClick={cancelSaveToDatabase}
@@ -323,8 +347,8 @@ const confirmSaveToDatabase = () => {
               </button>
               <button
                 onClick={confirmSaveToDatabase}
-                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
-                disabled={!scheduleDateOption}
+                disabled={!selectedDate || !scheduleDateOption}
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-blue-300"
               >
                 Confirm
               </button>
