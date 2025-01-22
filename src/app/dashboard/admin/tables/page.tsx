@@ -319,7 +319,7 @@ const confirmSaveToDatabase = () => {
                 <label className="flex items-center space-x-2">
                   <input
                     type="radio"
-                    value="morning"
+                    value="ช่วงเช้า"
                     checked={scheduleDateOption === 'ช่วงเช้า'}
                     onChange={() => setScheduleDateOption('ช่วงเช้า')}
                   />
@@ -328,7 +328,7 @@ const confirmSaveToDatabase = () => {
                 <label className="flex items-center space-x-2">
                   <input
                     type="radio"
-                    value="afternoon"
+                    value="ช่วงบ่าย"
                     checked={scheduleDateOption === 'ช่วงบ่าย'}
                     onChange={() => setScheduleDateOption('ช่วงบ่าย')}
                   />

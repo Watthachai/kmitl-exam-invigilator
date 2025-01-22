@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import prisma from '@/app/lib/prisma';
 import { ExamData } from '@/app/types';
 
+interface ImportRequest {
+  data: ExamData[];
+  scheduleOption: 'ช่วงเช้า'| 'ช่วงบ่าย';
+  examDate: string;
+}
+
 async function findOrCreateProfessors(names: string[]) {
   const professors = [];
   for (const name of names) {
@@ -25,7 +31,7 @@ async function findOrCreateProfessors(names: string[]) {
   return professors;
 }
 
-async function processExamData(examData: ExamData[], scheduleOption: 'morning' | 'afternoon') {
+async function processExamData(examData: ExamData[], scheduleOption: 'ช่วงเช้า' | 'ช่วงบ่าย', examDate: Date) {
   for (const row of examData) {
     try {
       // Pre-process professors outside main transaction
@@ -75,7 +81,7 @@ async function processExamData(examData: ExamData[], scheduleOption: 'morning' |
         const [startTime, endTime] = row.เวลา.split(' - ');
         await tx.schedule.create({
           data: {
-            date: new Date(),
+            date: examDate,
             scheduleDateOption: scheduleOption.toUpperCase(),
             startTime: new Date(`1970-01-01T${startTime}`),
             endTime: new Date(`1970-01-01T${endTime}`),
@@ -88,52 +94,39 @@ async function processExamData(examData: ExamData[], scheduleOption: 'morning' |
         timeout: 10000
       });
     } catch (error) {
-      throw new Error(`Error processing row: ${JSON.stringify(row)}\n${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Error processing row: ${JSON.stringify(row)}\n${errorMessage}`);
     }
   }
 }
 
 export async function POST(request: Request) {
-    try {
-      if (!request.body) {
-        return NextResponse.json({ 
-          error: 'Request body is required' 
-        }, { status: 400 });
-      }
-  
-      const body = await request.json();
-      
-      // Validate request body structure
-      if (!body || typeof body !== 'object') {
-        return NextResponse.json({ 
-          error: 'Invalid request format' 
-        }, { status: 400 });
-      }
-  
-      // Validate required fields
-      if (!body.data || !Array.isArray(body.data) || !body.scheduleOption) {
-        return NextResponse.json({ 
-          error: 'Missing required fields: data (array) and scheduleOption' 
-        }, { status: 400 });
-      }
-  
-      await processExamData(body.data, body.scheduleOption);
-      return NextResponse.json({ message: 'Data imported successfully' });
-  
-    } catch (error) {
-      // Type-safe error handling
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : 'Unknown error occurred';
-  
-      console.error('Import error:', {
-        message: errorMessage,
-        stack: error instanceof Error ? error.stack : undefined
-      });
-  
-      return NextResponse.json({
-        error: 'Import failed',
-        details: errorMessage
-      }, { status: 500 });
+  try {
+    const body = await request.json() as ImportRequest;
+    
+    if (!body?.data || !body?.scheduleOption || !body?.examDate || !['ช่วงเช้า', 'ช่วงบ่าย'].includes(body.scheduleOption)) {
+      return NextResponse.json({ 
+        error: 'Missing or invalid required fields' 
+      }, { status: 400 });
     }
+
+    await processExamData(body.data, body.scheduleOption, new Date(body.examDate));
+    return NextResponse.json({ message: 'Data imported successfully' });
+
+  } catch (error) {
+    // Type-safe error handling
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Unknown error occurred';
+
+    console.error('Import error:', {
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    });
+
+    return NextResponse.json({
+      error: 'Import failed',
+      details: errorMessage
+    }, { status: 500 });
   }
+}
