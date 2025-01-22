@@ -52,7 +52,7 @@ export default function TablePage() {
   const [editedData, setEditedData] = useState<TableData[]>([]);
   const [originalData, setOriginalData] = useState<TableData[]>([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [scheduleDateOption, setScheduleDateOption] = useState<'morning' | 'afternoon' | null>(null);
+  const [scheduleDateOption, setScheduleDateOption] = useState<'ช่วงเช้า' | 'ช่วงบ่าย' | null>(null);
   const [showDatePrompt, setShowDatePrompt] = useState(false);
   const [isPending, startTransition] = useTransition(); // For handling loading states during server actions
 
@@ -299,19 +299,19 @@ const confirmSaveToDatabase = () => {
                 <input
                   type="radio"
                   value="morning"
-                  checked={scheduleDateOption === 'morning'}
-                  onChange={() => setScheduleDateOption('morning')}
+                  checked={scheduleDateOption === 'ช่วงเช้า'}
+                  onChange={() => setScheduleDateOption('ช่วงเช้า')}
                 />
-                <span>Morning Schedule</span>
+                <span>ช่วงเช้า Schedule</span>
               </label>
               <label className="flex items-center space-x-2">
                 <input
                   type="radio"
                   value="afternoon"
-                  checked={scheduleDateOption === 'afternoon'}
-                  onChange={() => setScheduleDateOption('afternoon')}
+                  checked={scheduleDateOption === 'ช่วงบ่าย'}
+                  onChange={() => setScheduleDateOption('ช่วงบ่าย')}
                 />
-                <span>Afternoon Schedule</span>
+                <span>ช่วงบ่าย Schedule</span>
               </label>
             </div>
             <div className="flex justify-end space-x-2">
