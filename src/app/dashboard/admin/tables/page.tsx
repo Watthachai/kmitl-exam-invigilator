@@ -62,6 +62,7 @@ export default function TablePage() {
       try {
         const data = await parseExcelFile(file);
         setTableData(data);
+        toast.success('Excel file imported successfully!');
       } catch (error) {
         console.error('Error importing file:', error);
         toast.error('Error importing file');
@@ -81,7 +82,7 @@ export default function TablePage() {
       const currentData = isEditing ? editedData : tableData;
       const ws = XLSXUtils.json_to_sheet(currentData);
       const wb = XLSXUtils.book_new();
-      XLSXUtils.book_append_sheet(wb, ws, 'Sheet1');
+      XLSXUtils.book_append_sheet(wb, ws, 'ข้อมูลตารางสอบ');
       const excelBuffer = XLSXWrite(wb, { bookType: 'xlsx', type: 'array' });
       const data = new Blob([excelBuffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -89,7 +90,7 @@ export default function TablePage() {
       const url = window.URL.createObjectURL(data);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'exported-table.xlsx';
+      link.download = 'ช้อมูลตารางสอบทั้งหมด.xlsx';
       link.click();
       window.URL.revokeObjectURL(url);
       toast.success('Table exported successfully');
@@ -130,38 +131,55 @@ export default function TablePage() {
   };
 
   const handleSaveToDatabase = () => {
+    if (editedData.length === 0) {
+      toast.error('No data to save to the database.');
+      return;
+    }
     setShowDatePrompt(true);
   };
 
-  const confirmSaveToDatabase = () => {
-  
-    startTransition(async () => {
+// Update existing confirmSaveToDatabase function
+const confirmSaveToDatabase = () => {
+  startTransition(async () => {
+    const dataToSave = isEditing ? editedData : tableData;
+    
+    if (!scheduleDateOption) {
+      toast.error('Please select a schedule option (morning/afternoon)');
+      return;
+    }
+
+    try {
       const response = await fetch('/api/import-excel', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          data: editedData,
+          data: dataToSave,
           scheduleOption: scheduleDateOption
-        }),
+        })
       });
-  
+
       const result = await response.json();
-      if (result.success) {
-        toast.success(result.message);
-      } else {
-        toast.error(result?.message || 'Failed to save data.');
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to save data');
       }
+
+      toast.success('Data imported successfully');
       setShowDatePrompt(false);
       setScheduleDateOption(null);
-    });
-  };
-  
+
+    } catch (error) {
+      console.error('Save failed:', error);
+      toast.error(error instanceof Error ? error.message : 'An unknown error occurred');
+    }
+  });
+};
+
   const cancelSaveToDatabase = () => {
     setShowDatePrompt(false);
     setScheduleDateOption(null);
   };
+
 
   return (
     <div className="p-6 space-y-6">
@@ -169,6 +187,17 @@ export default function TablePage() {
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Table Import Page</h1>
         <div className="space-x-2">
+          <input
+            type="file"
+            accept=".xlsx, .xls"
+            onChange={handleFileUpload}
+            className="block w-full text-sm text-gray-500
+              file:mr-4 file:py-2 file:px-4
+              file:rounded-md file:border-0
+              file:text-sm file:font-semibold
+              file:bg-blue-50 file:text-blue-700
+              hover:file:bg-blue-100"
+          />
           {tableData.length > 0 && (
             <>
               <button
@@ -192,29 +221,15 @@ export default function TablePage() {
                 Fill Sequence & Subject
               </button>
               <button
-              onClick={handleSaveToDatabase}
-              className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
-              disabled={isPending || editedData.length === 0} // Disable button when saving
-            >
-              Save to Database {isPending && <>(Saving...) </>}
-            </button>
+                onClick={handleSaveToDatabase}
+                className="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600"
+                disabled={isPending || (isEditing && editedData.length === 0) || (!isEditing && tableData.length === 0)}
+              >
+                Save to Database {isPending && <>(Saving...) </>}
+              </button>
             </>
           )}
         </div>
-      </div>
-
-      <div className="mb-4">
-        <input
-          type="file"
-          accept=".xlsx, .xls"
-          onChange={handleFileUpload}
-          className="block w-full text-sm text-gray-500
-            file:mr-4 file:py-2 file:px-4
-            file:rounded-md file:border-0
-            file:text-sm file:font-semibold
-            file:bg-blue-50 file:text-blue-700
-            hover:file:bg-blue-100"
-        />
       </div>
 
       {tableData.length > 0 && (

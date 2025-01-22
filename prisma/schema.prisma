@@ -122,19 +122,20 @@ model Professor {
 }
 
 model Schedule {
-  id             String      @id @default(cuid()) @map("ScheduleID")
-  date           DateTime    @db.Date  // Use @db.Date for date only
-  startTime      DateTime    @db.Time  // Use @db.Time for time only
-  endTime        DateTime    @db.Time  // Use @db.Time for time only
-  room           Room        @relation(fields: [roomId], references: [id])
-  roomId         String
-  subjectGroup   SubjectGroup @relation(fields: [subjectGroupId], references: [id])
-  subjectGroupId String
-  invigilator    Invigilator @relation(fields: [invigilatorId], references: [id])
-  invigilatorId  String
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
+  id                  String      @id @default(cuid()) @map("ScheduleID")
+  date                DateTime    @db.Date  // Use @db.Date for date only
+  scheduleDateOption  String      // e.g. "MORNING", "AFTERNOON", "EVENING"
+  startTime           DateTime    @db.Time  // Use @db.Time for time only
+  endTime             DateTime    @db.Time  // Use @db.Time for time only
+  room                Room        @relation(fields: [roomId], references: [id])
+  roomId              String
+  subjectGroup        SubjectGroup @relation(fields: [subjectGroupId], references: [id])
+  subjectGroupId      String
+  invigilator         Invigilator @relation(fields: [invigilatorId], references: [id])
+  invigilatorId       String
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  
   @@index([roomId])
   @@index([subjectGroupId])
   @@index([invigilatorId])
