@@ -101,12 +101,12 @@ callbacks: {
 
                     await prisma.invigilator.create({
                         data: {
-                            name: profile.name ?? "Unknown", // Use profile name or a default value
-                            positionType: "INTERNAL",        // Set position type
-                            user: {
-                                connect: { id: newUser.id }, // Connect the invigilator to the user
+                            name: profile.name ?? "Unknown",
+                            positionType: "INTERNAL",
+                            user: { // Use the 'user' relation
+                                connect: { id: newUser.id }, // Connect to the existing User
                             }
-                        },
+                        }
                     });
                 }
 
@@ -121,7 +121,7 @@ callbacks: {
 },
    
     pages: {
-        signIn: '/auth/signin', // Customize the sign-in page
+        signIn: '/auth/login', // Customize the sign-in page
         error: '/auth/error', // Redirect to a custom error page
     },
          
