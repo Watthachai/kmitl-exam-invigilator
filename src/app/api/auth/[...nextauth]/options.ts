@@ -101,9 +101,11 @@ callbacks: {
 
                     await prisma.invigilator.create({
                         data: {
-                            name: profile.name ?? "Unknown",
-                            userId: newUser.id,
-                            positionType: "INTERNAL",
+                            name: profile.name ?? "Unknown", // Use profile name or a default value
+                            positionType: "INTERNAL",        // Set position type
+                            user: {
+                                connect: { id: newUser.id }, // Connect the invigilator to the user
+                            }
                         },
                     });
                 }
