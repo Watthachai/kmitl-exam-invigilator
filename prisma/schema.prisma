@@ -95,7 +95,7 @@ model SubjectGroup {
 model Invigilator {
   id          String     @id @default(cuid()) @map("InvigilatorID")
   name        String
-  positionType  String
+  positionType  String @default("INTERNAL") // INTERNAL or PROFESSOR
   professorId String?    // Optional link to professor if internal
   professor   Professor? @relation(fields: [professorId], references: [id])
   schedules   Schedule[]
