@@ -93,19 +93,18 @@ model SubjectGroup {
 }
 
 model Invigilator {
-  id          String     @id @default(cuid()) @map("InvigilatorID")
-  name        String
-  positionType  String @default("INTERNAL") // INTERNAL or PROFESSOR
-  professorId String?    // Optional link to professor if internal
-  professor   Professor? @relation(fields: [professorId], references: [id])
-  schedules   Schedule[]
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  userId      String?    @unique // Link to User
-  user        User?      @relation(fields: [userId], references: [id])
-
-  quota       Int        @default(4)
-  assignedQuota Int      @default(0)
+  id            String     @id @default(cuid()) @map("InvigilatorID")
+  name          String
+  type          String     @default("INTERNAL") 
+  professorId   String?
+  professor     Professor? @relation(fields: [professorId], references: [id])
+  schedules     Schedule[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  userId        String?    @unique
+  user          User?      @relation(fields: [userId], references: [id])
+  quota         Int        @default(4)
+  assignedQuota Int        @default(0)
 }
 
 model Professor {
