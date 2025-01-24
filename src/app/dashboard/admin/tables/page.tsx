@@ -161,6 +161,7 @@ const confirmSaveToDatabase = () => {
       });
 
       const result = await response.json();
+      console.log('Save response:', result);
       
       if (!response.ok) {
         throw new Error(result.error || 'Failed to save data');

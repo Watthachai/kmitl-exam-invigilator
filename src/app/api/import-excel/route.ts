@@ -9,29 +9,29 @@ interface ImportRequest {
 }
 
 async function findOrCreateProfessors(names: string[]) {
-  const professors = [];
-  for (const name of names) {
-    const trimmedName = name.trim();
-    const professor = await prisma.professor.findFirst({
-      where: { name: trimmedName }
-    });
-    
-    if (!professor) {
-      const newProfessor = await prisma.professor.create({
-        data: {
-          name: trimmedName,
-          departmentId: "cm64jppxh000f6qftcl0e4ik6"
-        }
+    const professors = [];
+    for (const name of names) {
+      const trimmedName = name.trim();
+      const professor = await prisma.professor.findFirst({
+        where: { name: trimmedName }
       });
-      professors.push(newProfessor);
-    } else {
-      professors.push(professor);
+      
+      if (!professor) {
+        const newProfessor = await prisma.professor.create({
+          data: {
+            name: trimmedName,
+            departmentId: "cm64jppxh000f6qftcl0e4ik6"
+          }
+        });
+        professors.push(newProfessor);
+      } else {
+        professors.push(professor);
+      }
     }
-  }
-  return professors;
+    return professors;
 }
 
-async function processExamData(examData: ExamData[], scheduleOption: 'ช่วงเช้า' | 'ช่วงบ่าย', examDate: Date) {
+async function processExamData(examData: ExamData[], scheduleOption: string, examDate: Date) {
   for (const row of examData) {
     try {
       // Pre-process professors outside main transaction
@@ -76,6 +76,18 @@ async function processExamData(examData: ExamData[], scheduleOption: 'ช่ว�
             professorId: professors[0].id
           }
         });
+
+        // Link additional professors
+      if (professors.length > 1) {
+        for (let i = 1; i < professors.length; i++) {
+          await tx.subjectGroupProfessor.create({
+            data: {
+                subjectGroup: { connect: { id: subjectGroup.id } },
+                professor: { connect: { id: professors[i].id } }
+            }
+          });
+        }
+      }
 
         // Create Schedule
         const [startTime, endTime] = row.เวลา.split(' - ');

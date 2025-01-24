@@ -1,11 +1,15 @@
-import type { NextAuthOptions } from 'next-auth'
+import type { NextAuthOptions, Account } from 'next-auth'
 import GitHubProvider from 'next-auth/providers/github'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { GithubProfile } from 'next-auth/providers/github'
 import GoogleProvider from 'next-auth/providers/google'
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { PrismaClient } from "@prisma/client";
+import { Profile } from "next-auth";
 
+interface ExtendedProfile extends Profile {
+    picture?: string; // Include the picture field as optional
+}
 const prisma = new PrismaClient();
 
 export const options: NextAuthOptions = {
@@ -55,50 +59,69 @@ export const options: NextAuthOptions = {
             }
         })
     ],
-    callbacks: {
-        async signIn({ account, profile }) {
-            if (account?.provider === "google") {
-                // Allow only emails ending with "@kmitl.ac.th"
-                if (profile?.email?.endsWith("@kmitl.ac.th")) {
-                    const user = await prisma.user.findUnique({
-                        where: { email: profile.email },
+callbacks: {
+    async signIn({ account, profile }: { account: Account | null; profile?: ExtendedProfile }) {
+        if (account?.provider === "google") {
+            if (profile?.email?.endsWith("@kmitl.ac.th")) {
+                const user = await prisma.user.findUnique({
+                    where: { email: profile.email },
+                });
+
+                const defaultImage = "https://example.com/default-avatar.png";
+
+                if (user) {
+                    if (!user.image && profile.picture) {
+                        await prisma.user.update({
+                            where: { id: user.id },
+                            data: { image: profile.picture },
+                        });
+                    }
+                } else {
+                    const newUser = await prisma.user.create({
+                        data: {
+                            name: profile.name ?? "Unknown",
+                            email: profile.email,
+                            image: profile.picture ?? defaultImage,
+                            accounts: {
+                                create: {
+                                    type: account.type,
+                                    provider: account.provider,
+                                    providerAccountId: account.providerAccountId,
+                                    refresh_token: account.refresh_token,
+                                    access_token: account.access_token,
+                                    expires_at: account.expires_at,
+                                    token_type: account.token_type,
+                                    scope: account.scope,
+                                    id_token: account.id_token,
+                                    session_state: account.session_state,
+                                },
+                            },
+                        },
                     });
 
-                    if (user) {
-                        // Check if the user is already linked to an invigilator
-                        const invigilator = await prisma.invigilator.findUnique({
-                            where: { userId: user.id },
-                        });
-
-                        if (!invigilator) {
-                            // Link the user with the invigilator model
-                            await prisma.invigilator.create({
-                                data: {
-                                    name: profile.name ?? "Unknown",
-                                    userId: user.id,
-                                    // Add other necessary fields here
-                                },
-                            });
-                        }
-                    }
-
-                    return true;
+                    await prisma.invigilator.create({
+                        data: {
+                            name: profile.name ?? "Unknown",
+                            userId: newUser.id,
+                            positionType: "INTERNAL",
+                        },
+                    });
                 }
-                return false;
+
+                return true;
             }
-            return true;
-        },
-        async redirect({ baseUrl }: { baseUrl: string }) {
-            return `${baseUrl}/dashboard`;
-        },
-        async session({ session, user }) {
-            // Add user ID and role to the session object
-            if (session.user) {
-                session.user.id = user.id;
-                session.user.role = user.role; // Include the role from the user object
-            }
-            return session;
-        },
+
+            return false; // Deny login for non-KMITL emails
+        }
+
+        return true; // Allow other providers
     },
+},
+   
+    pages: {
+        signIn: '/auth/signin', // Customize the sign-in page
+        error: '/auth/error', // Redirect to a custom error page
+    },
+         
     secret: process.env.NEXTAUTH_SECRET,
 };

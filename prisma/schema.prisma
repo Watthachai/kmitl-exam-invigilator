@@ -12,6 +12,7 @@ datasource db {
 generator client {
   provider = "prisma-client-js"
 }
+
 model Account {
   id                 String  @id @default(cuid()) @map("AccountID")
   userId             String
@@ -76,23 +77,25 @@ model Subject {
 }
 
 model SubjectGroup {
-  id           String       @id @default(cuid()) @map("SubjectGroupID")
-  groupNumber  String       // e.g. "901", "902"
-  year         Int         // Academic year
-  studentCount Int
-  subject      Subject     @relation(fields: [subjectId], references: [id])
-  subjectId    String
-  professor    Professor   @relation(fields: [professorId], references: [id])
-  professorId  String
-  schedules    Schedule[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id                  String                @id @default(cuid())
+  groupNumber         String
+  year               Int
+  studentCount       Int
+  subject            Subject               @relation(fields: [subjectId], references: [id])
+  subjectId          String
+  professor          Professor             @relation(fields: [professorId], references: [id])
+  professorId        String
+  schedule           Schedule[]
+  additionalProfessors SubjectGroupProfessor[]
+
+  @@index([subjectId])
+  @@index([professorId])
 }
 
 model Invigilator {
   id          String     @id @default(cuid()) @map("InvigilatorID")
   name        String
-  type        String     @default("INTERNAL") // INTERNAL(Can be GenED, Education and employee of bla bla bla department or faculty), MANAGER(HEAD OF DEPARTMENT), PROFESSOR, HEAD_PROFESSOR(HEAD OF FACULTY)
+  positionType        String     @default("INTERNAL") // INTERNAL(Can be GenED, Education and employee of bla bla bla department or faculty), MANAGER(HEAD OF DEPARTMENT), PROFESSOR, HEAD_PROFESSOR(HEAD OF FACULTY)
   professorId String?    // Optional link to professor if internal
   professor   Professor? @relation(fields: [professorId], references: [id])
   schedules   Schedule[]
@@ -106,19 +109,32 @@ model Invigilator {
 }
 
 model Professor {
-  id            String         @id @default(cuid()) @map("ProfessorID")
-  name          String
-  department    Department     @relation(fields: [departmentId], references: [id])
-  departmentId  String
-  subjectGroups SubjectGroup[]
-  invigilator   Invigilator[]
-  messages      Message[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  userId        String?        @unique
-  user          User?          @relation(fields: [userId], references: [id])
+  id                  String                @id @default(cuid()) @map("ProfessorID")
+  name                String                @unique
+  department          Department            @relation(fields: [departmentId], references: [id])
+  departmentId        String
+  subjectGroups       SubjectGroup[]
+  invigilator         Invigilator[]
+  subjectGroupProfessors SubjectGroupProfessor[]
+  messages            Message[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  userId              String?               @unique
+  user                User?                 @relation(fields: [userId], references: [id])
 
   @@index([departmentId])
+}
+
+model SubjectGroupProfessor {
+  id             String      @id @default(cuid())
+  subjectGroup   SubjectGroup @relation(fields: [subjectGroupId], references: [id])
+  subjectGroupId String
+  professor      Professor    @relation(fields: [professorId], references: [id])
+  professorId    String
+
+  @@unique([subjectGroupId, professorId])
+  @@index([subjectGroupId])
+  @@index([professorId])
 }
 
 model Schedule {
@@ -170,3 +186,5 @@ model Room {
 
   @@unique([building, roomNumber]) // Add unique constraint for building + roomNumber combination
 }
+
+
