@@ -8,45 +8,105 @@ interface ImportRequest {
   examDate: string;
 }
 
-async function findOrCreateProfessors(names: string[]) {
-    const professors = [];
-    for (const name of names) {
-      const trimmedName = name.trim();
-      const professor = await prisma.professor.findFirst({
-        where: { name: trimmedName }
-      });
-      
-      if (!professor) {
-        const newProfessor = await prisma.professor.create({
-          data: {
-            name: trimmedName,
-            departmentId: "cm64jppxh000f6qftcl0e4ik6"
+// Add this helper function
+async function getDepartmentFromSubjectCode(subjectCode: string) {
+  // Extract department code (first 2-3 digits)
+  const deptCode = subjectCode.trim().substring(0, 3);
+  
+  // Map department codes to names
+  const departmentMap: Record<string, string> = {
+    '010': 'Mechanical Engineering', //! Temporarily using Mechanical Engineering
+    '011': 'Electrical Engineering',
+    '012': 'Civil Engineering',
+    '013': 'Chemical Engineering', //! Temporarily using Chemical Engineering
+    '014': 'Industrial Engineering',
+    '015': 'Computer Engineering',
+    '016': 'Materials Engineering',
+    '017': 'Biomedical Engineering',
+    '018': 'Marine Engineering',
+    '019': 'Naval Architecture',
+    // Add more department mappings as needed
+  };
+
+  const departmentName = departmentMap[deptCode];
+  if (!departmentName) {
+    throw new Error(`Unknown department code: ${deptCode}`);
+  }
+
+  const department = await prisma.department.findFirst({
+    where: { name: departmentName }
+  });
+
+  if (!department) {
+    throw new Error(`Department not found: ${departmentName}`);
+  }
+
+  return department;
+}
+
+async function findOrCreateProfessors(names: string[], subjectCode: string) {
+  const professors = [];
+  const department = await getDepartmentFromSubjectCode(subjectCode);
+
+  for (const name of names) {
+    const trimmedName = name.trim();
+    const professor = await prisma.professor.findFirst({
+      where: { name: trimmedName }
+    });
+    
+    if (!professor) {
+      const newProfessor = await prisma.professor.create({
+        data: {
+          name: trimmedName,
+          department: {
+            connect: { id: department.id }
           }
-        });
-        professors.push(newProfessor);
-      } else {
-        professors.push(professor);
-      }
+        }
+      });
+      professors.push(newProfessor);
+    } else {
+      professors.push(professor);
     }
-    return professors;
+  }
+  return professors;
+}
+
+// Add this function to find or create default invigilator
+async function getDefaultInvigilator() {
+  const defaultInvigilator = await prisma.invigilator.findFirst();
+  if (!defaultInvigilator) {
+    return await prisma.invigilator.create({
+      data: {
+        name: "Default Invigilator",
+        type: "INTERNAL"
+      }
+    });
+  }
+  return defaultInvigilator;
 }
 
 async function processExamData(examData: ExamData[], scheduleOption: string, examDate: Date) {
+  const defaultInvigilator = await getDefaultInvigilator();
+  const processedSchedules = new Set(); // Track processed schedules
+
   for (const row of examData) {
     try {
-      // Pre-process professors outside main transaction
+      // Get department from subject code
+      const subjectCode = row.วิชา.trim().split(' ')[0];
+      const department = await getDepartmentFromSubjectCode(subjectCode);
+      
       const professorNames = row.ผู้สอน.split(',');
-      const professors = await findOrCreateProfessors(professorNames);
+      const professors = await findOrCreateProfessors(professorNames, subjectCode);
 
       await prisma.$transaction(async (tx) => {
-        // Process Subject
+        // Process Subject with dynamic departmentId
         const [code, ...nameParts] = row.วิชา.trim().split(' ');
         const subject = await tx.subject.upsert({
           where: { code: code.trim() },
           create: {
             code: code.trim(),
             name: nameParts.join(' '),
-            departmentId: "cm64jppxh000f6qftcl0e4ik6"
+            departmentId: department.id  // Dynamic department ID
           },
           update: { name: nameParts.join(' ') }
         });
@@ -66,42 +126,93 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
           update: {}
         });
 
-        // Create SubjectGroup
-        const subjectGroup = await tx.subjectGroup.create({
-          data: {
+        // Update SubjectGroup creation to use upsert
+        const subjectGroup = await tx.subjectGroup.upsert({
+          where: {
+            subjectId_groupNumber_year: {
+              subjectId: subject.id,
+              groupNumber: row.กลุ่ม.trim(),
+              year: parseInt(row['ชั้นปี'].trim())
+            }
+          },
+          create: {
             groupNumber: row.กลุ่ม.trim(),
             year: parseInt(row['ชั้นปี'].trim()),
             studentCount: parseInt(row['นศ.'].trim()),
             subjectId: subject.id,
             professorId: professors[0].id
+          },
+          update: {
+            studentCount: parseInt(row['นศ.'].trim()),
+            professorId: professors[0].id
           }
         });
 
         // Link additional professors
-      if (professors.length > 1) {
-        for (let i = 1; i < professors.length; i++) {
-          await tx.subjectGroupProfessor.create({
-            data: {
+        if (professors.length > 1) {
+          for (let i = 1; i < professors.length; i++) {
+            await tx.subjectGroupProfessor.upsert({
+              where: {
+                subjectGroupId_professorId: {
+                  subjectGroupId: subjectGroup.id,
+                  professorId: professors[i].id
+                }
+              },
+              create: {
                 subjectGroup: { connect: { id: subjectGroup.id } },
                 professor: { connect: { id: professors[i].id } }
-            }
-          });
+              },
+              update: {} // No updates needed
+            });
+          }
         }
-      }
 
-        // Create Schedule
+        // Create unique key for schedule
+        const scheduleKey = `${examDate}_${scheduleOption}_${row.เวลา}_${row.อาคาร}_${row.ห้อง}_${subjectGroup.id}`;
+        
+        // Check if schedule already processed
+        if (processedSchedules.has(scheduleKey)) {
+          console.log(`Skipping duplicate schedule: ${scheduleKey}`);
+          return;
+        }
+
         const [startTime, endTime] = row.เวลา.split(' - ');
-        await tx.schedule.create({
-          data: {
+        
+        // Log schedule creation attempt
+        console.log('Attempting to create schedule:', {
+          date: examDate,
+          option: scheduleOption,
+          startTime,
+          endTime,
+          room: room.id,
+          subjectGroup: subjectGroup.id
+        });
+
+        await tx.schedule.upsert({
+          where: {
+            date_scheduleDateOption_startTime_endTime_roomId_subjectGroupId: {
+              date: examDate,
+              scheduleDateOption: scheduleOption.toUpperCase(),
+              startTime: new Date(`1970-01-01T${startTime}`),
+              endTime: new Date(`1970-01-01T${endTime}`),
+              roomId: room.id,
+              subjectGroupId: subjectGroup.id
+            }
+          },
+          create: {
             date: examDate,
             scheduleDateOption: scheduleOption.toUpperCase(),
             startTime: new Date(`1970-01-01T${startTime}`),
             endTime: new Date(`1970-01-01T${endTime}`),
             roomId: room.id,
             subjectGroupId: subjectGroup.id,
-            invigilatorId: 'cm64k02750001pci491acindo'
-          }
+            invigilatorId: defaultInvigilator.id
+          },
+          update: {} // No updates needed for duplicates
         });
+
+        processedSchedules.add(scheduleKey);
+        
       }, {
         timeout: 10000
       });

@@ -90,6 +90,8 @@ model SubjectGroup {
 
   @@index([subjectId])
   @@index([professorId])
+
+  @@unique([subjectId, groupNumber, year])
 }
 
 model Invigilator {
@@ -125,15 +127,15 @@ model Professor {
 }
 
 model SubjectGroupProfessor {
-  id             String      @id @default(cuid())
-  subjectGroup   SubjectGroup @relation(fields: [subjectGroupId], references: [id])
+  id            String       @id @default(cuid())
+  subjectGroup  SubjectGroup @relation(fields: [subjectGroupId], references: [id])
   subjectGroupId String
-  professor      Professor    @relation(fields: [professorId], references: [id])
-  professorId    String
+  professor     Professor    @relation(fields: [professorId], references: [id])
+  professorId   String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   @@unique([subjectGroupId, professorId])
-  @@index([subjectGroupId])
-  @@index([professorId])
 }
 
 model Schedule {
@@ -154,6 +156,8 @@ model Schedule {
   @@index([roomId])
   @@index([subjectGroupId])
   @@index([invigilatorId])
+
+  @@unique([date, scheduleDateOption, startTime, endTime, roomId, subjectGroupId])
 }
 
 model Department {
