@@ -11,21 +11,27 @@ interface ImportRequest {
 // Add this helper function
 async function getDepartmentFromSubjectCode(subjectCode: string) {
   // Extract department code (first 2-3 digits)
-  const deptCode = subjectCode.trim().substring(0, 3);
+  const deptCode = subjectCode.trim().substring(2, 4);
   
   // Map department codes to names
   const departmentMap: Record<string, string> = {
-    '010': 'Mechanical Engineering', //! Temporarily using Mechanical Engineering
-    '011': 'Electrical Engineering',
-    '012': 'Civil Engineering',
-    '013': 'Chemical Engineering', //! Temporarily using Chemical Engineering
-    '014': 'Industrial Engineering',
-    '015': 'Computer Engineering',
-    '016': 'Materials Engineering',
-    '017': 'Biomedical Engineering',
-    '018': 'Marine Engineering',
-    '019': 'Naval Architecture',
-    // Add more department mappings as needed
+    '01': 'วิศวกรรมโทรคมนาคม',
+    '02': 'วิศวกรรมไฟฟ้า',
+    '04': 'วิศวกรรมอิเล็กทรอนิกส์',
+    '05': 'วิศวกรรมเครื่องกล',
+    '06': 'วิศวกรรมการวัดคุม',
+    '07': 'วิศวกรรมคอมพิวเตอร์',
+    '09': 'วิศวกรรมโยธา',
+    '11': 'วิศวกรรมอาหาร',
+    '21': 'วิศวกรรมอุตสาหการ',
+    '22': 'วิศวกรรมเคมี',
+    '23': 'วิศวกรรมIOT ถถถถถ กูไม่รู้วว',
+    '25': 'วิศวกรรมระบบอัตโนมัติ', 
+    '26': 'วิศวกรรมนานาชาติ (SIIEs)',
+    // ภาคพิเศษ
+    '077': 'วิศวกรรมคอมพิวเตอร์ (ต่อเนื่อง)',
+    '37': 'วิศวกรรมโยธา (ต่อเนื่อง)',
+    '38': 'วิศวกรรมเกษตร (ต่อเนื่อง)',
   };
 
   const departmentName = departmentMap[deptCode];
@@ -82,6 +88,7 @@ async function getDefaultInvigilator() {
       }
     });
   }
+  console.log('Default invigilator:', defaultInvigilator);
   return defaultInvigilator;
 }
 
