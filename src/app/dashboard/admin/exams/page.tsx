@@ -24,6 +24,7 @@ interface Schedule {
   date: Date;        // @db.Date
   startTime: Date;   // @db.Time
   endTime: Date;     // @db.Time
+  scheduleDateOption: string;  // 'MORNING' or 'AFTERNOON'
   room: {
     id: string;
     building: string;
@@ -62,6 +63,14 @@ export default function ExamsPage() {
     endTime: '',
     roomId: '',
     invigilatorId: ''
+  });
+
+  const [filters, setFilters] = useState({
+    date: '',
+    timeSlot: '', // 'ช่วงเช้า' or 'ช่วงบ่าย'
+    department: '',
+    building: '',
+    searchQuery: ''
   });
 
   useEffect(() => {
@@ -220,6 +229,41 @@ export default function ExamsPage() {
     }
   };
 
+  // Update filter logic
+  const filteredSchedules = schedules.filter(schedule => {
+    // Date filter
+    const matchesDate = !filters.date || 
+      new Date(schedule.date).toISOString().split('T')[0] === filters.date;
+  
+    // Time slot filter
+    const matchesTimeSlot = !filters.timeSlot || (() => {
+      const startTime = new Date(schedule.startTime).toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: false 
+      });
+      
+      if (filters.timeSlot === 'MORNING') {
+        return startTime === '08:30';
+      }
+      if (filters.timeSlot === 'AFTERNOON') {
+        return startTime === '13:30';
+      }
+      return true;
+    })();
+  
+    // Search filter
+    const searchQuery = filters.searchQuery.toLowerCase();
+    const matchesSearch = !searchQuery || 
+      schedule.room.building.toLowerCase().includes(searchQuery) ||
+      schedule.room.roomNumber.toLowerCase().includes(searchQuery) ||
+      `${schedule.room.building} ${schedule.room.roomNumber}`.toLowerCase().includes(searchQuery) ||
+      schedule.subjectGroup.subject.code.toLowerCase().includes(searchQuery) ||
+      schedule.subjectGroup.subject.name.toLowerCase().includes(searchQuery);
+  
+    return matchesDate && matchesTimeSlot && matchesSearch;
+  });
+
   return (
     <div className="p-6 space-y-6">
       <Toaster/>
@@ -231,6 +275,99 @@ export default function ExamsPage() {
         >
           Add Exam Schedule
         </button>
+      </div>
+
+      <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {/* Date Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Exam Date
+            </label>
+            <input
+              type="date"
+              value={filters.date}
+              onChange={(e) => setFilters({ ...filters, date: e.target.value })}
+              className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            />
+          </div>
+
+          {/* Time Slot Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Time Slot
+            </label>
+            <select
+              value={filters.timeSlot}
+              onChange={(e) => setFilters({ ...filters, timeSlot: e.target.value })}
+              className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white"
+            >
+              <option value="">All Time Slots</option>
+              <option value="MORNING">ช่วงเช้า (Morning)</option>
+              <option value="AFTERNOON">ช่วงบ่าย (Afternoon)</option>
+            </select>
+          </div>
+
+          {/* Building/Room Search */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Location Search
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={filters.searchQuery}
+                onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
+                placeholder="Search building or room..."
+                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all pl-10"
+              />
+              <svg
+                className="absolute left-3 top-3 h-5 w-5 text-gray-400"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+          </div>
+
+          {/* Clear Filters Button */}
+          <div className="flex items-end">
+            <button
+              onClick={() => setFilters({
+                date: '',
+                timeSlot: '',
+                department: '',
+                building: '',
+                searchQuery: ''
+              })}
+              className="w-full px-4 py-2.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+            >
+              <svg
+                className="h-5 w-5"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+              Clear Filters
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100">
@@ -248,7 +385,7 @@ export default function ExamsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {schedules.map((schedule) => (
+              {filteredSchedules.map((schedule) => (
                 <tr key={schedule.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     {schedule.subjectGroup.subject.code} - {schedule.subjectGroup.subject.name}
@@ -258,8 +395,16 @@ export default function ExamsPage() {
                     {new Date(schedule.date).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4">
-                    {new Date(schedule.startTime).toLocaleTimeString()} - 
-                    {new Date(schedule.endTime).toLocaleTimeString()}
+                    {new Date(schedule.startTime).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    })} - {' '}
+                    {new Date(schedule.endTime).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    })}
                   </td>
                   <td className="px-6 py-4">
                     {schedule.room.building} Room {schedule.room.roomNumber}
