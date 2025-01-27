@@ -5,6 +5,7 @@ import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import toast, { Toaster } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
 import { Invigilator } from "@prisma/client";
+import Highlight from '@/app/components/highlight';
 
 interface SubjectGroup {
   id: string;
@@ -388,9 +389,17 @@ export default function ExamsPage() {
               {filteredSchedules.map((schedule) => (
                 <tr key={schedule.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
-                    {schedule.subjectGroup.subject.code} - {schedule.subjectGroup.subject.name}
+                    <Highlight 
+                      text={`${schedule.subjectGroup.subject.code} - ${schedule.subjectGroup.subject.name}`}
+                      search={filters.searchQuery}
+                    />
                   </td>
-                  <td className="px-6 py-4">{schedule.subjectGroup.groupNumber}</td>
+                  <td className="px-6 py-4">
+                    <Highlight 
+                      text={schedule.subjectGroup.groupNumber}
+                      search={filters.searchQuery}
+                    />
+                  </td>
                   <td className="px-6 py-4">
                     {new Date(schedule.date).toLocaleDateString()}
                   </td>
@@ -407,7 +416,10 @@ export default function ExamsPage() {
                     })}
                   </td>
                   <td className="px-6 py-4">
-                    {schedule.room.building} Room {schedule.room.roomNumber}
+                    <Highlight 
+                      text={`${schedule.room.building} Room ${schedule.room.roomNumber}`}
+                      search={filters.searchQuery}
+                    />
                   </td>
                   <td className="px-6 py-4">{schedule.invigilator.name}</td>
                   <td className="px-6 py-4">
