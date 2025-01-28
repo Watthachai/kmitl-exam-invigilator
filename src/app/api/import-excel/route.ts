@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/app/lib/prisma';
 import { ExamData } from '@/app/types';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 interface ImportRequest {
   data: ExamData[];
@@ -161,7 +162,7 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
           }
         });
 
-        // Link additional professors
+        // Update professor linking logic
         if (professors.length > 1) {
           for (let i = 1; i < professors.length; i++) {
             await tx.subjectGroupProfessor.upsert({
@@ -172,10 +173,11 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
                 }
               },
               create: {
-                subjectGroup: { connect: { id: subjectGroup.id } },
-                professor: { connect: { id: professors[i].id } }
+                id: `${subjectGroup.id}_${professors[i].id}`,
+                subjectGroupId: subjectGroup.id,
+                professorId: professors[i].id
               },
-              update: {} // No updates needed
+              update: {} 
             });
           }
         }
@@ -230,8 +232,15 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
         timeout: 10000
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`Error processing row: ${JSON.stringify(row)}\n${errorMessage}`);
+      const isPrismaError = error instanceof Error && 'code' in error;
+      if (isPrismaError && error instanceof PrismaClientKnownRequestError) {
+        // Handle known Prisma errors
+        const message = error.code === 'P2002' ? 
+          'Duplicate entry found' : 
+          error.message;
+        throw new Error(`Database error: ${message}`);
+      }
+      throw error;
     }
   }
 }
