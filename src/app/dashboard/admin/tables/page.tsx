@@ -146,98 +146,56 @@ export default function TablePage() {
 
 // Update existing confirmSaveToDatabase function
 const confirmSaveToDatabase = async () => {
-  // ... existing validation ...
-
   const stages = {
-    INIT: { progress: 0, message: '🚀 Initializing import process...' },
-    VALIDATION: { progress: 5, message: '🔍 Validating data structure...' },
-    DEPARTMENTS: { progress: 15, message: '🏢 Processing departments...' },
-    PROFESSORS: { progress: 30, message: '👨‍🏫 Processing professors...' },
-    SUBJECTS: { progress: 45, message: '📚 Creating/updating subjects...' },
-    ROOMS: { progress: 60, message: '🏫 Processing rooms...' },
-    GROUPS: { progress: 75, message: '👥 Creating subject groups...' },
-    SCHEDULES: { progress: 85, message: '📅 Creating exam schedules...' },
-    COMPLETE: { progress: 100, message: '✅ Import completed!' }
+    INIT: { progress: 0, message: '🚀 Starting import...' },
+    PROCESSING: { progress: 20, message: '📝 Processing records...' },
+    DATA_IMPORT: { progress: 40, message: '💾 Importing data...' },
+    SAVING: { progress: 70, message: '📥 Saving to database...' },
+    COMPLETE: { progress: 100, message: '✅ Import complete!' }
   };
 
   try {
     setIsImporting(true);
     setImportProgress(stages.INIT.progress);
     setImportLogs([stages.INIT.message]);
-    await new Promise(r => setTimeout(r, 1000));
-
-    // Validation Stage
-    setImportStage('Validation');
-    setImportProgress(stages.VALIDATION.progress);
-    setImportLogs(prev => [...prev, stages.VALIDATION.message]);
-    await new Promise(r => setTimeout(r, 1000));
-
-    // Process each record
+    
+    // Process records in larger chunks
     const dataToSave = isEditing ? editedData : tableData;
-    const chunkSize = 5;
+    const chunkSize = 10; // Increased chunk size
     
     for (let i = 0; i < dataToSave.length; i += chunkSize) {
       const chunk = dataToSave.slice(i, i + chunkSize);
+      const currentProgress = Math.min(70, Math.floor((i / dataToSave.length) * 50) + 20);
       
-      // Department Processing
-      setImportStage('Processing Departments');
-      setImportProgress(stages.DEPARTMENTS.progress);
-      setImportLogs(prev => [...prev, `${stages.DEPARTMENTS.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
-      await new Promise(r => setTimeout(r, 800));
+      setImportStage('Processing & Saving');
+      setImportProgress(currentProgress);
+      setImportLogs(prev => [...prev, 
+        `📊 Processing batch ${Math.floor(i/chunkSize) + 1}/${Math.ceil(dataToSave.length/chunkSize)}`
+      ]);
 
-      // Professor Processing
-      setImportStage('Processing Professors');
-      setImportProgress(stages.PROFESSORS.progress);
-      setImportLogs(prev => [...prev, `${stages.PROFESSORS.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
-      await new Promise(r => setTimeout(r, 800));
-
-      // Subject Processing
-      setImportStage('Processing Subjects');
-      setImportProgress(stages.SUBJECTS.progress);
-      setImportLogs(prev => [...prev, `${stages.SUBJECTS.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
-      await new Promise(r => setTimeout(r, 800));
-
-      // Room Processing
-      setImportStage('Processing Rooms');
-      setImportProgress(stages.ROOMS.progress);
-      setImportLogs(prev => [...prev, `${stages.ROOMS.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
-      await new Promise(r => setTimeout(r, 800));
-
-      // Group Processing
-      setImportStage('Creating Groups');
-      setImportProgress(stages.GROUPS.progress);
-      setImportLogs(prev => [...prev, `${stages.GROUPS.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
-      await new Promise(r => setTimeout(r, 800));
-
-      // Schedule Creation
-      setImportStage('Creating Schedules');
-      setImportProgress(stages.SCHEDULES.progress);
-      setImportLogs(prev => [...prev, `${stages.SCHEDULES.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
-      
-      // Actual API call
+      // API call
       const response = await fetch('/api/import-excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           data: chunk,
           scheduleOption: scheduleDateOption,
-          examDate: selectedDate ? selectedDate.toISOString() : null
+          examDate: selectedDate?.toISOString()
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to import chunk ${i + 1}-${Math.min(i + chunkSize, dataToSave.length)}`);
+        throw new Error(`Failed to import batch ${Math.floor(i/chunkSize) + 1}`);
       }
 
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 300)); // Reduced delay
     }
 
     // Complete
     setImportStage('Complete');
-    setImportProgress(stages.COMPLETE.progress);
+    setImportProgress(100);
     setImportLogs(prev => [...prev, stages.COMPLETE.message]);
-    await new Promise(r => setTimeout(r, 1000));
-
+    
     toast.success('Data imported successfully');
     setShowDatePrompt(false);
     setScheduleDateOption(null);
@@ -245,7 +203,7 @@ const confirmSaveToDatabase = async () => {
     setIsImporting(false);
 
   } catch (error) {
-    setImportLogs(prev => [...prev, `❌ Error: ${error instanceof Error ? error.message : 'An unknown error occurred'}`]);
+    setImportLogs(prev => [...prev, `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`]);
     toast.error(error instanceof Error ? error.message : 'An unknown error occurred');
     setIsImporting(false);
   }
