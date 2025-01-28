@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 
 const adminNavItems = [
   { href: '/dashboard/admin', label: 'Dashboard', icon: Home },
-  { href: '/dashboard/admin/tables', label: 'Tables', icon: Table },
+  { href: '/dashboard/admin/tables', label: 'Import Exam Table', icon: Table },
   { href: '/dashboard/admin/departments', label: 'Departments', icon: Book },
   { href: '/dashboard/admin/invigilators', label: 'Invigilators', icon: Users },
   { href: '/dashboard/admin/messages', label: 'Messages', icon: MessageCircle},
