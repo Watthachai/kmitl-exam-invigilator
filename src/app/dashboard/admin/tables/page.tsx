@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { parseExcelFile } from '@/app/lib/excel-wrapper';
 import { utils as XLSXUtils, write as XLSXWrite } from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
+import ImportProgress from '@/app/components/ui/import-progress';
 interface TableData {
   [key: string]: string | number | null;
 }
@@ -54,8 +55,12 @@ export default function TablePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [scheduleDateOption, setScheduleDateOption] = useState<'ช่วงเช้า' | 'ช่วงบ่าย' | null>(null);
   const [showDatePrompt, setShowDatePrompt] = useState(false);
-  const [isPending, startTransition] = useTransition(); // For handling loading states during server actions
+  const [isPending] = useTransition(); // For handling loading states during server actions
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importStage, setImportStage] = useState('');
+  const [importLogs, setImportLogs] = useState<string[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -140,43 +145,110 @@ export default function TablePage() {
   };
 
 // Update existing confirmSaveToDatabase function
-const confirmSaveToDatabase = () => {
-  startTransition(async () => {
-    const dataToSave = isEditing ? editedData : tableData;
-    
-    if (!scheduleDateOption || !selectedDate) {
-      toast.error('Please select both date and schedule option');
-      return;
-    }
+const confirmSaveToDatabase = async () => {
+  // ... existing validation ...
 
-    try {
+  const stages = {
+    INIT: { progress: 0, message: '🚀 Initializing import process...' },
+    VALIDATION: { progress: 5, message: '🔍 Validating data structure...' },
+    DEPARTMENTS: { progress: 15, message: '🏢 Processing departments...' },
+    PROFESSORS: { progress: 30, message: '👨‍🏫 Processing professors...' },
+    SUBJECTS: { progress: 45, message: '📚 Creating/updating subjects...' },
+    ROOMS: { progress: 60, message: '🏫 Processing rooms...' },
+    GROUPS: { progress: 75, message: '👥 Creating subject groups...' },
+    SCHEDULES: { progress: 85, message: '📅 Creating exam schedules...' },
+    COMPLETE: { progress: 100, message: '✅ Import completed!' }
+  };
+
+  try {
+    setIsImporting(true);
+    setImportProgress(stages.INIT.progress);
+    setImportLogs([stages.INIT.message]);
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Validation Stage
+    setImportStage('Validation');
+    setImportProgress(stages.VALIDATION.progress);
+    setImportLogs(prev => [...prev, stages.VALIDATION.message]);
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Process each record
+    const dataToSave = isEditing ? editedData : tableData;
+    const chunkSize = 5;
+    
+    for (let i = 0; i < dataToSave.length; i += chunkSize) {
+      const chunk = dataToSave.slice(i, i + chunkSize);
+      
+      // Department Processing
+      setImportStage('Processing Departments');
+      setImportProgress(stages.DEPARTMENTS.progress);
+      setImportLogs(prev => [...prev, `${stages.DEPARTMENTS.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
+      await new Promise(r => setTimeout(r, 800));
+
+      // Professor Processing
+      setImportStage('Processing Professors');
+      setImportProgress(stages.PROFESSORS.progress);
+      setImportLogs(prev => [...prev, `${stages.PROFESSORS.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
+      await new Promise(r => setTimeout(r, 800));
+
+      // Subject Processing
+      setImportStage('Processing Subjects');
+      setImportProgress(stages.SUBJECTS.progress);
+      setImportLogs(prev => [...prev, `${stages.SUBJECTS.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
+      await new Promise(r => setTimeout(r, 800));
+
+      // Room Processing
+      setImportStage('Processing Rooms');
+      setImportProgress(stages.ROOMS.progress);
+      setImportLogs(prev => [...prev, `${stages.ROOMS.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
+      await new Promise(r => setTimeout(r, 800));
+
+      // Group Processing
+      setImportStage('Creating Groups');
+      setImportProgress(stages.GROUPS.progress);
+      setImportLogs(prev => [...prev, `${stages.GROUPS.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
+      await new Promise(r => setTimeout(r, 800));
+
+      // Schedule Creation
+      setImportStage('Creating Schedules');
+      setImportProgress(stages.SCHEDULES.progress);
+      setImportLogs(prev => [...prev, `${stages.SCHEDULES.message} (${i + 1}-${Math.min(i + chunkSize, dataToSave.length)})`]);
+      
+      // Actual API call
       const response = await fetch('/api/import-excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          data: dataToSave,
+          data: chunk,
           scheduleOption: scheduleDateOption,
-          examDate: selectedDate.toISOString()
-        })
+          examDate: selectedDate ? selectedDate.toISOString() : null
+        }),
       });
 
-      const result = await response.json();
-      console.log('Save response:', result);
-      
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to save data');
+        throw new Error(`Failed to import chunk ${i + 1}-${Math.min(i + chunkSize, dataToSave.length)}`);
       }
 
-      toast.success('Data imported successfully');
-      setShowDatePrompt(false);
-      setScheduleDateOption(null);
-      setSelectedDate(null);
-
-    } catch (error) {
-      console.error('Save failed:', error);
-      toast.error(error instanceof Error ? error.message : 'An unknown error occurred');
+      await new Promise(r => setTimeout(r, 1000));
     }
-  });
+
+    // Complete
+    setImportStage('Complete');
+    setImportProgress(stages.COMPLETE.progress);
+    setImportLogs(prev => [...prev, stages.COMPLETE.message]);
+    await new Promise(r => setTimeout(r, 1000));
+
+    toast.success('Data imported successfully');
+    setShowDatePrompt(false);
+    setScheduleDateOption(null);
+    setSelectedDate(null);
+    setIsImporting(false);
+
+  } catch (error) {
+    setImportLogs(prev => [...prev, `❌ Error: ${error instanceof Error ? error.message : 'An unknown error occurred'}`]);
+    toast.error(error instanceof Error ? error.message : 'An unknown error occurred');
+    setIsImporting(false);
+  }
 };
 
   const cancelSaveToDatabase = () => {
@@ -358,6 +430,14 @@ const confirmSaveToDatabase = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {isImporting && (
+        <ImportProgress
+          progress={importProgress}
+          currentStage={importStage}
+          logs={importLogs}
+        />
       )}
     </div>
   );

@@ -8,33 +8,39 @@ interface ImportRequest {
   examDate: string;
 }
 
+// Define department mappings with arrays
+const departmentMappings = [
+  { codes: ['00'], name: 'ส่วนกลาง' },
+  { codes: ['01'], name: 'วิศวกรรมโทรคมนาคม' },
+  { codes: ['02'], name: 'วิศวกรรมไฟฟ้า' },
+  { codes: ['04', '34', '10', '104', '133'], name: 'วิศวกรรมอิเล็กทรอนิกส์' },
+  { codes: ['06', '066', '068', '306', '00672', '106', '116', '121'], name: 'วิศวกรรมการวัดคุม' },
+  { codes: ['05'], name: 'วิศวกรรมเครื่องกล' },
+  { codes: ['07'], name: 'วิศวกรรมคอมพิวเตอร์' },
+  { codes: ['09'], name: 'วิศวกรรมโยธา' },
+  { codes: ['11', '21'], name: 'วิศวกรรมอุตสาหการ' },
+  { codes: ['12'], name: 'วิศวกรรมเคมี' },
+];
+
+// Create lookup map
+const departmentMap: Record<string, string> = {};
+departmentMappings.forEach(mapping => {
+  mapping.codes.forEach(code => {
+    departmentMap[code] = mapping.name;
+  });
+});
+
+// Helper function to get department name
+const getDepartmentName = (code: string): string => {
+  return departmentMap[code] || 'Unknown Department';
+};
+
 // Add this helper function
 async function getDepartmentFromSubjectCode(subjectCode: string) {
   // Extract department code (first 2-3 digits)
-  const deptCode = subjectCode.trim().substring(2, 4);
+  const deptCode = subjectCode.trim().substring(1, 3);
   
-  // Map department codes to names
-  const departmentMap: Record<string, string> = {
-    '01': 'วิศวกรรมโทรคมนาคม',
-    '02': 'วิศวกรรมไฟฟ้า',
-    '04': 'วิศวกรรมอิเล็กทรอนิกส์',
-    '05': 'วิศวกรรมเครื่องกล',
-    '06': 'วิศวกรรมการวัดคุม',
-    '07': 'วิศวกรรมคอมพิวเตอร์',
-    '09': 'วิศวกรรมโยธา',
-    '11': 'วิศวกรรมอาหาร',
-    '21': 'วิศวกรรมอุตสาหการ',
-    '22': 'วิศวกรรมเคมี',
-    '23': 'วิศวกรรมIOT ถถถถถ กูไม่รู้วว',
-    '25': 'วิศวกรรมระบบอัตโนมัติ', 
-    '26': 'วิศวกรรมนานาชาติ (SIIEs)',
-    // ภาคพิเศษ
-    '077': 'วิศวกรรมคอมพิวเตอร์ (ต่อเนื่อง)',
-    '37': 'วิศวกรรมโยธา (ต่อเนื่อง)',
-    '38': 'วิศวกรรมเกษตร (ต่อเนื่อง)',
-  };
-
-  const departmentName = departmentMap[deptCode];
+  const departmentName = getDepartmentName(deptCode);
   if (!departmentName) {
     throw new Error(`Unknown department code: ${deptCode}`);
   }
