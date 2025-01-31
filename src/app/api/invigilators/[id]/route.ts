@@ -7,15 +7,36 @@ export async function PUT(
 ) {
     try {
         const { id } = await params;
-        const { name, type, professorId } = await request.json();
+        const data = await request.json();
+
+        // If type is อาจารย์, get professor's departmentId
+        let departmentId = data.departmentId;
+        if (data.type === 'อาจารย์' && data.professorId) {
+          const professor = await prisma.professor.findUnique({
+            where: { id: data.professorId },
+            select: { departmentId: true }
+          });
+          departmentId = professor?.departmentId;
+        }
 
         const updatedInvigilator = await prisma.invigilator.update({
             where: { id },
             data: {
-                name,
-                type,
-                professorId: professorId || null,
+                name: data.name,
+                type: data.type,
+                departmentId: departmentId || null,
+                professorId: data.professorId || null,
             },
+            include: {
+                department: true,
+                professor: {
+                    include: {
+                        department: true
+                    }
+                },
+                user: true,
+                schedules: true,
+            }
         });
 
         return NextResponse.json(updatedInvigilator);
