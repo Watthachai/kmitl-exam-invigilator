@@ -6,19 +6,25 @@ export async function GET() {
   try {
     const schedules = await prisma.schedule.findMany({
       include: {
-        room: true,
         subjectGroup: {
           include: {
-            subject: true,
-          },
+            professor: true,
+            subject: {
+              include: {
+                department: true
+              }
+            }
+          }
         },
-        invigilator: true,
-      },
+        room: true,
+        invigilator: true
+      }
     });
-    return NextResponse.json(schedules);
+    
+    return Response.json(schedules);
   } catch (error) {
     console.error('Error fetching schedules:', error);
-    return NextResponse.json({ error: 'Failed to fetch schedules' }, { status: 500 });
+    return Response.json({ error: 'Failed to fetch schedules' }, { status: 500 });
   }
 }
 
@@ -38,6 +44,7 @@ export async function POST(request: Request) {
         date: new Date(body.date),
         startTime: new Date(body.startTime),
         endTime: new Date(body.endTime),
+        scheduleDateOption: 'FINAL', // or another valid value based on your schema
         subjectGroup: { connect: { id: body.subjectGroupId } },
         room: { connect: { id: body.roomId } },
         invigilator: { connect: { id: body.invigilatorId } }

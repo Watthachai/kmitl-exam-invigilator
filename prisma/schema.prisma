@@ -12,6 +12,7 @@ datasource db {
 generator client {
   provider = "prisma-client-js"
 }
+
 model Account {
   id                 String  @id @default(cuid()) @map("AccountID")
   userId             String
@@ -76,74 +77,100 @@ model Subject {
 }
 
 model SubjectGroup {
-  id           String       @id @default(cuid()) @map("SubjectGroupID")
-  groupNumber  String       // e.g. "901", "902"
-  year         Int         // Academic year
-  studentCount Int
-  subject      Subject     @relation(fields: [subjectId], references: [id])
-  subjectId    String
-  professor    Professor   @relation(fields: [professorId], references: [id])
-  professorId  String
-  schedules    Schedule[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id                  String                @id @default(cuid())
+  groupNumber         String
+  year               Int
+  studentCount       Int
+  subject            Subject               @relation(fields: [subjectId], references: [id])
+  subjectId          String
+  professor          Professor             @relation(fields: [professorId], references: [id])
+  professorId        String
+  schedule           Schedule[]
+  additionalProfessors SubjectGroupProfessor[]
+
+  @@index([subjectId])
+  @@index([professorId])
+
+  @@unique([subjectId, groupNumber, year])
 }
 
 model Invigilator {
-  id          String     @id @default(cuid()) @map("InvigilatorID")
-  name        String
-  type        String     @default("INTERNAL") // INTERNAL, EXTERNAL, STAFF
-  professorId String?    // Optional link to professor if internal
-  professor   Professor? @relation(fields: [professorId], references: [id])
-  schedules   Schedule[]
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  userId      String?    @unique // Link to User
-  user        User?      @relation(fields: [userId], references: [id])
+  id            String     @id @default(cuid()) @map("InvigilatorID")
+  name          String
+  type          String     @default("บุคลากร")
+  departmentId  String?    // Make optional first
+  department    Department? @relation(fields: [departmentId], references: [id]) // Optional relation
+  professorId   String?
+  professor     Professor? @relation(fields: [professorId], references: [id])
+  schedules     Schedule[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  userId        String?    @unique
+  user          User?      @relation(fields: [userId], references: [id])
+  quota         Int        @default(4)
+  assignedQuota Int        @default(0)
+
+  @@index([departmentId])
+  @@index([professorId])
 }
 
 model Professor {
-  id            String         @id @default(cuid()) @map("ProfessorID")
-  name          String
-  department    Department     @relation(fields: [departmentId], references: [id])
-  departmentId  String
-  subjectGroups SubjectGroup[]
-  invigilator   Invigilator[]
-  messages      Message[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  userId        String?        @unique
-  user          User?          @relation(fields: [userId], references: [id])
+  id                  String                @id @default(cuid()) @map("ProfessorID")
+  name                String                @unique
+  department          Department            @relation(fields: [departmentId], references: [id])
+  departmentId        String
+  subjectGroups       SubjectGroup[]
+  invigilator         Invigilator[]
+  subjectGroupProfessors SubjectGroupProfessor[]
+  messages            Message[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  userId              String?               @unique
+  user                User?                 @relation(fields: [userId], references: [id])
 
   @@index([departmentId])
 }
 
-model Schedule {
-  id             String      @id @default(cuid()) @map("ScheduleID")
-  date           DateTime    @db.Date  // Use @db.Date for date only
-  startTime      DateTime    @db.Time  // Use @db.Time for time only
-  endTime        DateTime    @db.Time  // Use @db.Time for time only
-  room           Room        @relation(fields: [roomId], references: [id])
-  roomId         String
-  subjectGroup   SubjectGroup @relation(fields: [subjectGroupId], references: [id])
+model SubjectGroupProfessor {
+  id            String       @id @default(cuid())
+  subjectGroup  SubjectGroup @relation(fields: [subjectGroupId], references: [id])
   subjectGroupId String
-  invigilator    Invigilator @relation(fields: [invigilatorId], references: [id])
-  invigilatorId  String
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  professor     Professor    @relation(fields: [professorId], references: [id])
+  professorId   String
 
+  @@unique([subjectGroupId, professorId])
+}
+
+model Schedule {
+  id                  String      @id @default(cuid()) @map("ScheduleID")
+  date                DateTime    @db.Date  // Use @db.Date for date only
+  scheduleDateOption  String      // e.g. "MORNING", "AFTERNOON", "EVENING"
+  startTime           DateTime    @db.Time  // Use @db.Time for time only
+  endTime             DateTime    @db.Time  // Use @db.Time for time only
+  room                Room        @relation(fields: [roomId], references: [id])
+  roomId              String
+  subjectGroup        SubjectGroup @relation(fields: [subjectGroupId], references: [id])
+  subjectGroupId      String
+  invigilator         Invigilator @relation(fields: [invigilatorId], references: [id])
+  invigilatorId       String
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  
   @@index([roomId])
   @@index([subjectGroupId])
   @@index([invigilatorId])
+
+  @@unique([date, scheduleDateOption, startTime, endTime, roomId, subjectGroupId])
 }
 
 model Department {
-  id         String      @id @default(cuid()) @map("DepartmentID")
-  name       String
-  subjects   Subject[]
-  professors Professor[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id          String       @id @default(cuid()) @map("DepartmentID")
+  name        String       @unique
+  subjects    Subject[]
+  professors  Professor[]
+  invigilators Invigilator[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }
 
 model Message {

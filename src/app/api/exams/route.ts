@@ -29,6 +29,7 @@ export async function POST(request: Request) {
             date: new Date(date),
             startTime: new Date(startTime),
             endTime: new Date(endTime),
+            scheduleDateOption: 'ช่วงเช้า',
             room: { connect: { id: roomId } },
             subjectGroup: { connect: { id: subjectGroupId } },
             invigilator: { connect: { id: invigilatorId } },

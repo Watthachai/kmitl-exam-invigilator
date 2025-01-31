@@ -5,6 +5,7 @@ import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import toast, { Toaster } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
 import { Invigilator } from "@prisma/client";
+import Highlight from '@/app/components/ui/highlight';
 
 interface SubjectGroup {
   id: string;
@@ -21,28 +22,50 @@ interface Room {
 }
 interface Schedule {
   id: string;
-  date: Date;        // @db.Date
-  startTime: Date;   // @db.Time
-  endTime: Date;     // @db.Time
+  date: Date;
+  startTime: Date;
+  endTime: Date;
+  notes?: string;
   room: {
     id: string;
     building: string;
     roomNumber: string;
+    capacity?: number;
   };
   subjectGroup: {
     id: string;
     groupNumber: string;
+    year?: number;
+    studentCount?: number;
+    professor: {
+      name: string;
+    };
     subject: {
       code: string;
       name: string;
+      department: {
+        name: string;
+      };
     };
   };
   invigilator: {
     id: string;
     name: string;
+    type?: string;
   };
-  createdAt: Date;
-  updatedAt: Date;
+}
+
+interface Department {
+  id: string;
+  name: string;
+}
+
+interface Professor {
+  id: string;
+  name: string;
+  department: {
+    name: string;
+  };
 }
 
 export default function ExamsPage() {
@@ -55,6 +78,8 @@ export default function ExamsPage() {
   const [subjectGroups, setSubjectGroups] = useState([]);
   const [invigilators, setInvigilators] = useState([]);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [professors, setProfessors] = useState<Professor[]>([]);
   const [formData, setFormData] = useState({
     subjectGroupId: '',
     date: '',
@@ -62,6 +87,15 @@ export default function ExamsPage() {
     endTime: '',
     roomId: '',
     invigilatorId: ''
+  });
+
+  const [filters, setFilters] = useState({
+    date: '',
+    timeSlot: '', // 'ช่วงเช้า' or 'ช่วงบ่าย'
+    department: '',
+    professor: '',
+    building: '',
+    searchQuery: ''
   });
 
   useEffect(() => {
@@ -117,6 +151,34 @@ export default function ExamsPage() {
       toast.error('Failed to fetch rooms');
     }
   };
+
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const response = await fetch('/api/departments');
+        const data = await response.json();
+        setDepartments(data);
+      } catch (error) {
+        console.error('Failed to fetch departments:', error);
+        toast.error('Failed to fetch departments');
+      }
+    };
+    fetchDepartments();
+  }, []);
+
+  useEffect(() => {
+    const fetchProfessors = async () => {
+      try {
+        const response = await fetch('/api/professors');
+        const data = await response.json();
+        setProfessors(data);
+      } catch (error) {
+        console.error('Failed to fetch professors:', error);
+        toast.error('Failed to fetch professors');
+      }
+    };
+    fetchProfessors();
+  }, []);
 
   const handleAddSchedule = async () => {
     try {
@@ -220,6 +282,49 @@ export default function ExamsPage() {
     }
   };
 
+  // Update filter logic
+  const filteredSchedules = schedules.filter(schedule => {
+    // Date filter
+    const matchesDate = !filters.date || 
+      new Date(schedule.date).toISOString().split('T')[0] === filters.date;
+  
+    // Time slot filter
+    const matchesTimeSlot = !filters.timeSlot || (() => {
+      const startTime = new Date(schedule.startTime).toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: false 
+      });
+      
+      if (filters.timeSlot === 'MORNING') {
+        return startTime === '08:30';
+      }
+      if (filters.timeSlot === 'AFTERNOON') {
+        return startTime === '13:30';
+      }
+      return true;
+    })();
+  
+    // Add department filter
+    const matchesDepartment = !filters.department || 
+      schedule.subjectGroup.subject.department.name === filters.department;
+
+    // Add professor filter
+    const matchesProfessor = !filters.professor || 
+      schedule.subjectGroup.professor.name === filters.professor;
+
+    // Search filter
+    const searchQuery = filters.searchQuery.toLowerCase();
+    const matchesSearch = !searchQuery || 
+      schedule.room.building.toLowerCase().includes(searchQuery) ||
+      schedule.room.roomNumber.toLowerCase().includes(searchQuery) ||
+      `${schedule.room.building} ${schedule.room.roomNumber}`.toLowerCase().includes(searchQuery) ||
+      schedule.subjectGroup.subject.code.toLowerCase().includes(searchQuery) ||
+      schedule.subjectGroup.subject.name.toLowerCase().includes(searchQuery);
+  
+    return matchesDate && matchesTimeSlot && matchesDepartment && matchesSearch && matchesProfessor;
+  });
+
   return (
     <div className="p-6 space-y-6">
       <Toaster/>
@@ -233,38 +338,193 @@ export default function ExamsPage() {
         </button>
       </div>
 
+      <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100 p-6">
+        <div className="grid grid-cols-6 gap-4"> {/* Changed from md:grid-cols-4 to grid-cols-6 */}
+          {/* Date Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1"> {/* Reduced mb-2 to mb-1 */}
+              Exam Date
+            </label>
+            <input
+              type="date"
+              value={filters.date}
+              onChange={(e) => setFilters({ ...filters, date: e.target.value })}
+              className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+            />
+          </div>
+
+          {/* Time Slot Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Time Slot
+            </label>
+            <select
+              value={filters.timeSlot}
+              onChange={(e) => setFilters({ ...filters, timeSlot: e.target.value })}
+              className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
+            >
+              <option value="">All Times</option>
+              <option value="MORNING">Morning</option>
+              <option value="AFTERNOON">Afternoon</option>
+            </select>
+          </div>
+
+          {/* Department Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Department
+            </label>
+            <select
+              value={filters.department}
+              onChange={(e) => setFilters({ ...filters, department: e.target.value })}
+              className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
+            >
+              <option value="">All Depts</option>
+              {departments.map((dept) => (
+                <option key={dept.id} value={dept.name}>
+                  {dept.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Professor Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Professor
+            </label>
+            <select
+              value={filters.professor}
+              onChange={(e) => setFilters({ ...filters, professor: e.target.value })}
+              className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
+            >
+              <option value="">All Profs</option>
+              {professors.map((prof) => (
+                <option key={prof.id} value={prof.name}>
+                  {prof.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Search Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Search
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={filters.searchQuery}
+                onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
+                placeholder="Search..."
+                className="w-full px-8 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+              />
+              <svg
+                className="absolute left-2 top-2 h-4 w-4 text-gray-400"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+          </div>
+
+          {/* Clear Filters Button */}
+          <div className="flex items-end">
+            <button
+              onClick={() => setFilters({
+                date: '',
+                timeSlot: '',
+                department: '',
+                professor: '',
+                building: '',
+                searchQuery: ''
+              })}
+              className="w-full px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all flex items-center justify-center gap-1 text-sm"
+            >
+              <svg
+                className="h-4 w-4"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+              Clear
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
-            <thead className="bg-white/95 backdrop-blur-sm">
+          <thead className="bg-white/95 backdrop-blur-sm">
               <tr className="border-b border-gray-100">
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Subject</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Group</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Date</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Time</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Location</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Invigilator</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">วันที่</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">เวลา</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">วิชา</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">กลุ่มเรียน</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">ชั้นปี</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">จำนวน นศ.</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">ผู้สอน</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">อาคาร</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">ห้อง</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">จำนวน</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">ภาควิชา</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">ตำแหน่งผู้คุมสอบ</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">ชื่อเจ้าหน้าที่</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">หมายเหตุ</th>
                 <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {schedules.map((schedule) => (
+              {filteredSchedules.map((schedule) => (
                 <tr key={schedule.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
-                    {schedule.subjectGroup.subject.code} - {schedule.subjectGroup.subject.name}
+                    {new Date(schedule.date).toLocaleDateString('th-TH')}
+                  </td>
+                  <td className="px-6 py-4">
+                    {new Date(schedule.startTime).toLocaleTimeString('th-TH', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })} - {' '}
+                    {new Date(schedule.endTime).toLocaleTimeString('th-TH', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </td>
+                  <td className="px-6 py-4">
+                    <Highlight 
+                      text={`${schedule.subjectGroup.subject.code} - ${schedule.subjectGroup.subject.name}`}
+                      search={filters.searchQuery}
+                    />
                   </td>
                   <td className="px-6 py-4">{schedule.subjectGroup.groupNumber}</td>
-                  <td className="px-6 py-4">
-                    {new Date(schedule.date).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4">
-                    {new Date(schedule.startTime).toLocaleTimeString()} - 
-                    {new Date(schedule.endTime).toLocaleTimeString()}
-                  </td>
-                  <td className="px-6 py-4">
-                    {schedule.room.building} Room {schedule.room.roomNumber}
-                  </td>
+                  <td className="px-6 py-4">{schedule.subjectGroup.year || '-'}</td>
+                  <td className="px-6 py-4">{schedule.subjectGroup.studentCount || '-'}</td>
+                  <td className="px-6 py-4">{schedule.subjectGroup.professor?.name || '-'}</td>
+                  <td className="px-6 py-4">{schedule.room.building}</td>
+                  <td className="px-6 py-4">{schedule.room.roomNumber}</td>
+                  <td className="px-6 py-4">{schedule.room.capacity || '-'}</td>
+                  <td className="px-6 py-4">{schedule.subjectGroup.subject.department.name || '-'}</td>
+                  <td className="px-6 py-4">{schedule.invigilator.type || '-'}</td>
                   <td className="px-6 py-4">{schedule.invigilator.name}</td>
+                  <td className="px-6 py-4">{schedule.notes || '-'}</td>
                   <td className="px-6 py-4">
                     <div className="flex justify-end gap-2">
                       <button

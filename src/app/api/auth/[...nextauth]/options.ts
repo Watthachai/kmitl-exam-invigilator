@@ -1,104 +1,88 @@
-import type { NextAuthOptions } from 'next-auth'
-import GitHubProvider from 'next-auth/providers/github'
-import CredentialsProvider from 'next-auth/providers/credentials'
-import { GithubProfile } from 'next-auth/providers/github'
-import GoogleProvider from 'next-auth/providers/google'
+import type { NextAuthOptions } from "next-auth";
+import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { PrismaClient } from "@prisma/client";
+
 
 const prisma = new PrismaClient();
 
 export const options: NextAuthOptions = {
-    adapter: PrismaAdapter(prisma),
-    providers: [
-        GitHubProvider({
-            profile(profile: GithubProfile) {
-                //console.log(profile)
-                return {
-                    ...profile,
-                    role: profile.role ?? "user",
-                    id: profile.id.toString(),
-                    image: profile.avatar_url,
-                }
-            },
-            clientId: process.env.GITHUB_ID as string,
-            clientSecret: process.env.GITHUB_SECRET as string,
-        }),
-        GoogleProvider({
-            clientId: process.env.GOOGLE_CLIENT_ID!,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-        }),
-        CredentialsProvider({
-            name: "Credentials",
-            credentials: {
-                username: {
-                    label: "Username:",
-                    type: "text",
-                    placeholder: "your username"
-                },
-                password: {
-                    label: "Password:",
-                    type: "password",
-                    placeholder: "your password"
-                }
-            },
-            async authorize(credentials) {
-                // This is where you need to retrieve user data 
-                // to verify with credentials
-                // Docs: https://next-auth.js.org/configuration/providers/credentials
-                const user = { id: "999999", name: "Aun", password: "1234", role: "admin" }
-                if (credentials?.username === user.name && credentials?.password === user.password) {
-                    return user
-                } else {
-                    return null
-                }
-            }
-        })
-    ],
-    callbacks: {
-        async signIn({ account, profile }) {
-            if (account?.provider === "google") {
-                // Allow only emails ending with "@kmitl.ac.th"
-                if (profile?.email?.endsWith("@kmitl.ac.th")) {
-                    const user = await prisma.user.findUnique({
-                        where: { email: profile.email },
-                    });
+  // 1) Connect NextAuth to Prisma via the official adapter
+  adapter: PrismaAdapter(prisma),
 
-                    if (user) {
-                        // Check if the user is already linked to an invigilator
-                        const invigilator = await prisma.invigilator.findUnique({
-                            where: { userId: user.id },
-                        });
+  // 2) Define your Auth Providers
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+  ],
 
-                        if (!invigilator) {
-                            // Link the user with the invigilator model
-                            await prisma.invigilator.create({
-                                data: {
-                                    name: profile.name ?? "Unknown",
-                                    userId: user.id,
-                                    // Add other necessary fields here
-                                },
-                            });
-                        }
-                    }
-
-                    return true;
-                }
-                return false;
-            }
-            return true;
-        },
-        async redirect({ baseUrl }: { baseUrl: string }) {
-            return `${baseUrl}/dashboard`;
-        },
-        async session({ session, user }) {
-            // Add user ID and role to the session object
-            if (session.user) {
-                session.user.id = user.id;
-                session.user.role = user.role; // Include the role from the user object
-            }
-            return session;
-        },
+  // 3) NextAuth callbacks
+  callbacks: {
+    /**
+     * signIn: Control if a user is allowed to sign in.
+     * Here, we only allow Google sign-ins with a "@kmitl.ac.th" domain.
+     */
+    async signIn({ account, profile }) {
+      if (account?.provider === "google") {
+        // Check if the user’s email ends with "@kmitl.ac.th"
+        if (profile?.email?.endsWith("@kmitl.ac.th")) {
+          return true; // Allow sign-in
+        }
+        // Otherwise, block sign-in
+        return false;
+      }
+      // For other providers, allow sign-in by default
+      return true;
     },
-    secret: process.env.NEXTAUTH_SECRET,
+
+    /**
+     * redirect: Where to redirect the user after successful login.
+     */
+    async redirect({ baseUrl }) {
+      return `${baseUrl}/dashboard`;
+    },
+
+    /**
+     * session: Runs whenever a session is checked/created.
+     * We attach user.id and user.role to the session object.
+     */
+    async session({ session, user }) {
+      if (session.user) {
+        session.user.id = user.id;
+        session.user.role = user.role;
+      }
+      return session;
+    },
+  },
+
+  // 4) NextAuth events
+  events: {
+    /**
+     * createUser: Triggered *once* when a new User record is first created in your DB.
+     * Perfect for automatically creating an Invigilator record linked to the user.
+     */
+    async createUser({ user }) {
+      // Only create an Invigilator if the user has a kmitl email (or any condition you choose).
+      if (user.email && user.email.endsWith("@kmitl.ac.th")) {
+        const existingInvigilator = await prisma.invigilator.findUnique({
+          where: { userId: user.id },
+        });
+
+        if (!existingInvigilator) {
+          await prisma.invigilator.create({
+            data: {
+              name: user.name ?? "Unknown",
+              userId: user.id,
+              // Fill in other necessary fields (positionType, etc.)
+            },
+          });
+        }
+      }
+    },
+  },
+
+  // 5) Make sure you set a secret for NextAuth
+  secret: process.env.NEXTAUTH_SECRET,
 };
