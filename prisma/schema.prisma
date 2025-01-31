@@ -165,7 +165,7 @@ model Schedule {
 
 model Department {
   id          String       @id @default(cuid()) @map("DepartmentID")
-  name        String
+  name        String       @unique
   subjects    Subject[]
   professors  Professor[]
   invigilators Invigilator[]

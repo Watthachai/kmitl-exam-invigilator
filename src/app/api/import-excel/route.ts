@@ -21,6 +21,12 @@ const departmentMappings = [
   { codes: ['09'], name: 'วิศวกรรมโยธา' },
   { codes: ['11', '21'], name: 'วิศวกรรมอุตสาหการ' },
   { codes: ['12'], name: 'วิศวกรรมเคมี' },
+  // Add new departments
+  { codes: ['03'], name: 'วิศวกรรมไฟฟ้าสื่อสารและอิเล็กทรอนิกส์' },
+  { codes: ['08'], name: 'วิศวกรรมเครื่องมือและวัสดุ' },
+  { codes: ['13'], name: 'วิศวกรรมอาหาร' },
+  { codes: ['14'], name: 'วิศวกรรมชีวการแพทย์' },
+  { codes: ['90', '91', '92', '93', '94', '95'], name: 'วิชาพื้นฐาน' }
 ];
 
 // Create lookup map
@@ -31,35 +37,34 @@ departmentMappings.forEach(mapping => {
   });
 });
 
-// Helper function to get department name
-const getDepartmentName = (code: string): string => {
-  return departmentMap[code] || 'Unknown Department';
-};
 
-// Add this helper function
-async function getDepartmentFromSubjectCode(subjectCode: string) {
-  // Extract department code (first 2-3 digits)
-  const deptCode = subjectCode.trim().substring(1, 3);
-  
-  const departmentName = getDepartmentName(deptCode);
-  if (!departmentName) {
-    throw new Error(`Unknown department code: ${deptCode}`);
+// Add helper function to get department code
+function getDepartmentCode(subjectCode: string): string {
+  for (const dept of departmentMappings) {
+    const matchedCode = dept.codes.find(code => 
+      subjectCode.startsWith(code.padStart(2, '0'))
+    );
+    if (matchedCode) {
+      return dept.name;
+    }
   }
-
-  const department = await prisma.department.findFirst({
-    where: { name: departmentName }
-  });
-
-  if (!department) {
-    throw new Error(`Department not found: ${departmentName}`);
-  }
-
-  return department;
+  return 'ส่วนกลาง'; // Default department
 }
 
 async function findOrCreateProfessors(names: string[], subjectCode: string) {
   const professors = [];
-  const department = await getDepartmentFromSubjectCode(subjectCode);
+  const departmentName = getDepartmentCode(subjectCode);
+
+  // First ensure department exists
+  let department = await prisma.department.findUnique({
+    where: { name: departmentName }
+  });
+
+  if (!department) {
+    department = await prisma.department.create({
+      data: { name: departmentName }
+    });
+  }
 
   for (const name of names) {
     const trimmedName = name.trim();
@@ -72,7 +77,9 @@ async function findOrCreateProfessors(names: string[], subjectCode: string) {
         data: {
           name: trimmedName,
           department: {
-            connect: { id: department.id }
+            connect: { 
+              name: departmentName // Connect by name instead of id
+            }
           }
         }
       });
@@ -99,6 +106,36 @@ async function getDefaultInvigilator() {
   return defaultInvigilator;
 }
 
+// Update the subject upsert operation
+async function upsertSubject(subjectCode: string, subjectName: string) {
+  const departmentName = getDepartmentCode(subjectCode);
+  
+  // First find or create department
+  let department = await prisma.department.findUnique({
+    where: { name: departmentName }
+  });
+
+  if (!department) {
+    department = await prisma.department.create({
+      data: { name: departmentName }
+    });
+  }
+
+  // Then upsert subject with department ID
+  return await prisma.subject.upsert({
+    where: { code: subjectCode },
+    create: {
+      code: subjectCode,
+      name: subjectName,
+      departmentId: department.id
+    },
+    update: {
+      name: subjectName,
+      departmentId: department.id
+    }
+  });
+}
+
 async function processExamData(examData: ExamData[], scheduleOption: string, examDate: Date) {
   const defaultInvigilator = await getDefaultInvigilator();
   const processedSchedules = new Set(); // Track processed schedules
@@ -107,7 +144,6 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
     try {
       // Get department from subject code
       const subjectCode = row.วิชา.trim().split(' ')[0];
-      const department = await getDepartmentFromSubjectCode(subjectCode);
       
       const professorNames = row.ผู้สอน.split(',');
       const professors = await findOrCreateProfessors(professorNames, subjectCode);
@@ -115,15 +151,7 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
       await prisma.$transaction(async (tx) => {
         // Process Subject with dynamic departmentId
         const [code, ...nameParts] = row.วิชา.trim().split(' ');
-        const subject = await tx.subject.upsert({
-          where: { code: code.trim() },
-          create: {
-            code: code.trim(),
-            name: nameParts.join(' '),
-            departmentId: department.id  // Dynamic department ID
-          },
-          update: { name: nameParts.join(' ') }
-        });
+        const subject = await upsertSubject(code.trim(), nameParts.join(' '));
 
         // Process Room
         const room = await tx.room.upsert({

@@ -5,7 +5,7 @@ import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import toast, { Toaster } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
 import { Invigilator } from "@prisma/client";
-import Highlight from '@/app/components/highlight';
+import Highlight from '@/app/components/ui/highlight';
 
 interface SubjectGroup {
   id: string;

@@ -145,7 +145,7 @@ export default function InvigilatorsPage() {
       fetchInvigilators();
     } catch (error) {
       console.error('Failed to add invigilator:', error);
-      toast.error(error.message || 'Failed to add invigilator');
+      toast.error(error instanceof Error ? error.message : 'Failed to add invigilator');
     }
   };
 
@@ -189,7 +189,7 @@ export default function InvigilatorsPage() {
       fetchInvigilators();
     } catch (error) {
       console.error('Failed to update invigilator:', error);
-      toast.error(error.message || 'Failed to update invigilator');
+      toast.error(error instanceof Error ? error.message : 'Failed to update invigilator');
     }
   };
 
@@ -377,13 +377,13 @@ export default function InvigilatorsPage() {
 
               {newInvigilator.type === 'บุคลากร' && (
                 <div>
-                  <label className="block text-gray-700">Department</label>
+                  <label className="block text-gray-700">ภาควิชา</label>
                   <select
-                    value={newInvigilator.departmentId}
+                    value={newInvigilator.departmentId || ''}  // Ensure empty string fallback
                     onChange={(e) => setNewInvigilator({ ...newInvigilator, departmentId: e.target.value })}
                     className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">Select Department</option>
+                    <option value="">เลือกภาควิชา</option>
                     {departments.map(dept => (
                       <option key={dept.id} value={dept.id}>{dept.name}</option>
                     ))}
@@ -393,13 +393,13 @@ export default function InvigilatorsPage() {
 
               {newInvigilator.type === 'อาจารย์' && (
                 <div>
-                  <label className="block text-gray-700">Professor</label>
+                  <label className="block text-gray-700">อาจารย์</label>
                   <select
-                    value={newInvigilator.professorId}
+                    value={newInvigilator.professorId || ''}  // Ensure empty string fallback
                     onChange={(e) => setNewInvigilator({ ...newInvigilator, professorId: e.target.value })}
                     className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">Select Professor</option>
+                    <option value="">เลือกอาจารย์</option>
                     {professors.map(prof => (
                       <option key={prof.id} value={prof.id}>{prof.name}</option>
                     ))}
@@ -444,7 +444,7 @@ export default function InvigilatorsPage() {
                 <div>
                   <label className="block text-gray-700">Department</label>
                   <select
-                    value={editInvigilator.departmentId}
+                    value={editInvigilator.departmentId || ''}  // Ensure empty string fallback
                     onChange={(e) => setEditInvigilator({ ...editInvigilator, departmentId: e.target.value })}
                     className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
@@ -460,7 +460,7 @@ export default function InvigilatorsPage() {
                 <div>
                   <label className="block text-gray-700">Professor</label>
                   <select
-                    value={editInvigilator.professorId}
+                    value={editInvigilator.professorId || ''}  // Ensure empty string fallback
                     onChange={(e) => setEditInvigilator({ ...editInvigilator, professorId: e.target.value })}
                     className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >

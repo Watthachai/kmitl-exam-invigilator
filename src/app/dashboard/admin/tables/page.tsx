@@ -6,14 +6,14 @@ import { utils as XLSXUtils, write as XLSXWrite } from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import ImportProgress from '@/app/components/ui/import-progress';
 interface TableData {
-  [key: string]: string | number | null;
+  [key: string]: string | number | null | boolean;
 }
 
-const EditableCell = ({ value, onChange }: { value: string | number | null; onChange: (value: string) => void }) => {
+const EditableCell = ({ value, onChange }: { value: string | number | boolean | null; onChange: (value: string) => void }) => {
   return (
     <input
       type="text"
-      value={value ?? ''}
+      value={value?.toString() ?? ''}
       onChange={(e) => onChange(e.target.value)}
       className="w-full p-2 border border-transparent hover:border-gray-300 focus:border-blue-500 rounded"
     />
@@ -22,7 +22,7 @@ const EditableCell = ({ value, onChange }: { value: string | number | null; onCh
 
 const fillSequenceAndSubject = (data: TableData[]) => {
   let currentNumber: number | null = null;
-  let currentSubject: string | number | null = null;
+  let currentSubject: string | number | boolean | null = null;
 
   return data.map((row, index) => {
     const sequenceNum = Number(row["ลำดับ"]);
@@ -214,6 +214,37 @@ const confirmSaveToDatabase = async () => {
     setScheduleDateOption(null);
   };
 
+  const addMissingRoomEntries = () => {
+    // นับจำนวนห้องที่มีในข้อมูล
+    const roomCount: Record<string, number> = {};
+    
+    tableData.forEach(row => {
+      const room = row["ห้อง"]?.toString();
+      if (room) {
+        roomCount[room] = (roomCount[room] || 0) + 1;
+      }
+    });
+  
+    // คัดลอกข้อมูลและเพิ่มแถวที่ขาด
+    const newData = [...tableData];
+  
+    Object.entries(roomCount).forEach(([room, count]) => {
+      if (count < 2) {
+        const existingRow = tableData.find(row => row["ห้อง"]?.toString() === room);
+        if (existingRow) {
+          newData.push({
+            ...existingRow,
+            isSystemGenerated: true // ใช้เพื่อแสดงไฮไลต์
+          });
+        }
+      }
+    });
+  
+    setTableData(newData);
+    toast.success("Added missing room entries!");
+  };
+  
+
 
   return (
     <div className="p-6 space-y-6">
@@ -254,6 +285,14 @@ const confirmSaveToDatabase = async () => {
               >
                 Fill Sequence & Subject
               </button>
+              
+              <button
+                onClick={addMissingRoomEntries}
+                className="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600"
+              >
+                Add Missing Rooms
+              </button>
+
               <button
                 onClick={handleSaveToDatabase}
                 className="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600"
@@ -285,7 +324,10 @@ const confirmSaveToDatabase = async () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {(isEditing ? editedData : tableData).map((row, rowIndex) => (
-                    <tr key={rowIndex}>
+                    <tr 
+                      key={rowIndex} 
+                      className={`${row.isSystemGenerated ? "bg-yellow-100" : ""}`}
+                    >
                       {Object.entries(row).map(([key, value], cellIndex) => (
                         <td key={`${rowIndex}-${cellIndex}`} className="px-6 py-4 whitespace-nowrap">
                           {isEditing ? (
