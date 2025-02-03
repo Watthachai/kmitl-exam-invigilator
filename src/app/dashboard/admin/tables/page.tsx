@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import React, { useState, useTransition, useCallback } from 'react';
 import { parseExcelFile } from '@/app/lib/excel-wrapper';
 import { utils as XLSXUtils, write as XLSXWrite } from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import ImportProgress from '@/app/components/ui/import-progress';
+import { useDropzone } from 'react-dropzone';
+
 interface TableData {
   [key: string]: string | number | null | boolean;
 }
@@ -46,6 +48,90 @@ const fillSequenceAndSubject = (data: TableData[]) => {
 
     return row;
   });
+};
+
+const FileUpload = ({ onFileUpload }: { onFileUpload: (file: File) => void }) => {
+  // Add state persistence
+  const [fileName, setFileName] = useState<string>(() => {
+    // Check if we have a stored filename
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('lastUploadedFile');
+      return stored || '';
+    }
+    return '';
+  });
+  
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    if (acceptedFiles?.length > 0) {
+      const file = acceptedFiles[0];
+      // Store filename in state and session
+      setFileName(file.name);
+      sessionStorage.setItem('lastUploadedFile', file.name);
+      onFileUpload(file);
+      toast.success(`อัพโหลดไฟล์ ${file.name} สำเร็จ`);
+    }
+  }, [onFileUpload]);
+
+  // Rest of the component remains the same
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls']
+    },
+    multiple: false
+  });
+
+  return (
+    <div className="relative">
+      <div {...getRootProps()} className={`
+        flex items-center gap-3 px-4 py-2
+        border-2 border-dashed rounded-lg cursor-pointer
+        transition-all duration-200
+        ${fileName ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'}
+        ${isDragActive ? 'border-blue-400 bg-blue-50 scale-102' : ''}
+      `}>
+        <input {...getInputProps()} />
+        
+        <svg 
+          className={`w-5 h-5 ${fileName ? 'text-green-500' : 'text-gray-400'}`}
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+        >
+          {fileName ? (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          ) : (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          )}
+        </svg>
+
+        <span className={`text-sm ${fileName ? 'text-green-600' : 'text-gray-600'}`}>
+          {fileName 
+            ? `ไฟล์ที่เลือก: ${fileName}`
+            : 'คลิกหรือลากไฟล์มาวาง (.xlsx, .xls)'}
+        </span>
+      </div>
+
+      {isDragActive && (
+        <div className="fixed inset-0 bg-blue-500/10 backdrop-blur-sm z-50 pointer-events-none">
+          <div className="flex items-center justify-center h-full">
+            <div className="bg-white p-6 rounded-lg shadow-xl border-2 border-blue-500 border-dashed animate-pulse">
+              <div className="text-xl text-blue-500 flex items-center gap-2">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                วางไฟล์ที่นี่
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default function TablePage() {
@@ -214,94 +300,101 @@ const confirmSaveToDatabase = async () => {
     setScheduleDateOption(null);
   };
 
-  const addMissingRoomEntries = () => {
-    const roomCount: Record<string, number> = {};
-    
-    tableData.forEach(row => {
-      const room = row["ห้อง"]?.toString();
-      if (room) {
-        roomCount[room] = (roomCount[room] || 0) + 1;
+  // Update addMissingRoomEntries function to group rows
+const addMissingRoomEntries = () => {
+  const roomCount: Record<string, number> = {};
+  const systemGeneratedRows: TableData[] = [];
+  
+  // First pass: count rooms and mark existing rows
+  const newData = tableData.map(row => {
+    const room = row["ห้อง"]?.toString();
+    if (room) {
+      roomCount[room] = (roomCount[room] || 0) + 1;
+    }
+    return row;
+  });
+
+  // Second pass: create system generated rows
+  Object.entries(roomCount).forEach(([room, count]) => {
+    if (count < 2) {
+      const existingRow = tableData.find(row => row["ห้อง"]?.toString() === room);
+      if (existingRow) {
+        const existingNote = existingRow["หมายเหตุ"]?.toString() || '';
+        systemGeneratedRows.push({
+          ...existingRow,
+          "หมายเหตุ": existingNote ? `${existingNote}, เพิ่มแถวโดยระบบ` : "เพิ่มแถวโดยระบบ"
+        });
       }
-    });
-  
-    const newData = [...tableData];
-  
-    Object.entries(roomCount).forEach(([room, count]) => {
-      if (count < 2) {
-        const existingRow = tableData.find(row => row["ห้อง"]?.toString() === room);
-        if (existingRow) {
-          const existingNote = existingRow["หมายเหตุ"]?.toString() || '';
-          newData.push({
-            ...existingRow,
-            "หมายเหตุ": existingNote ? `${existingNote}, เพิ่มแถวโดยระบบ` : "เพิ่มแถวโดยระบบ"
-          });
-        }
-      }
-    });
-  
-    setTableData(newData);
-    toast.success("Added missing room entries!");
-  };
-  
+    }
+  });
+
+  // Combine original and system generated rows
+  setTableData([...newData, ...systemGeneratedRows]);
+  toast.success("เพิ่มแถวที่ขาดเรียบร้อยแล้ว!");
+};
 
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 min-h-screen">
       <Toaster />
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Table Import Page</h1>
-        <div className="space-x-2">
-          <input
-            type="file"
-            accept=".xlsx, .xls"
-            onChange={handleFileUpload}
-            className="block w-full text-sm text-gray-500
-              file:mr-4 file:py-2 file:px-4
-              file:rounded-md file:border-0
-              file:text-sm file:font-semibold
-              file:bg-blue-50 file:text-blue-700
-              hover:file:bg-blue-100"
-          />
-          {tableData.length > 0 && (
-            <>
-              <button
-                onClick={() => handleEditClick()}
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                disabled={isEditing}
-              >
-                Edit Table
-              </button>
-              <button
-                onClick={handleExport}
-                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
-              >
-                Export to Excel
-              </button>
-              <button
-                onClick={handleFillData}
-                className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
-                disabled={!isEditing || editedData.length === 0}
-              >
-                Fill Sequence & Subject
-              </button>
-              
-              <button
-                onClick={addMissingRoomEntries}
-                className="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600"
-              >
-                Add Missing Rooms
-              </button>
+        <h1 className="text-2xl font-bold">หน้านำเข้าข้อมูลตารางสอบ</h1>
+        
+        {/* Move FileUpload to center when no data */}
+        {tableData.length === 0 ? (
+          <div className="fixed inset-0 flex items-center justify-center">
+            <div className="w-[600px] p-12 rounded-xl bg-white/50 backdrop-blur-sm shadow-lg border-2 border-dashed border-gray-200">
+              <FileUpload 
+                onFileUpload={(file) => handleFileUpload({ target: { files: [file] } } as any)} 
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-4">
+            <FileUpload 
+              onFileUpload={(file) => handleFileUpload({ target: { files: [file] } } as any)} 
+            />
+            {tableData.length > 0 && (
+              <>
+                <button
+                  onClick={() => handleEditClick()}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                  disabled={isEditing}
+                >
+                  แก้ไขตาราง
+                </button>
+                <button
+                  onClick={handleExport}
+                  className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
+                >
+                  ส่งออกเป็น Excel
+                </button>
+                <button
+                  onClick={handleFillData}
+                  className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600"
+                  disabled={!isEditing || editedData.length === 0}
+                >
+                  เติมลำดับและรายวิชา
+                </button>
+                
+                <button
+                  onClick={addMissingRoomEntries}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600"
+                >
+                  เพิ่มห้องที่ขาด
+                </button>
 
-              <button
-                onClick={handleSaveToDatabase}
-                className="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600"
-                disabled={isPending || (isEditing && editedData.length === 0) || (!isEditing && tableData.length === 0)}
-              >
-                Save to Database {isPending && <>(Saving...) </>}
-              </button>
-            </>
-          )}
-        </div>
+                <button
+                  onClick={handleSaveToDatabase}
+                  className="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600"
+                  disabled={isPending || (isEditing && editedData.length === 0) || (!isEditing && tableData.length === 0)}
+                >
+                  บันทึกลงฐานข้อมูล {isPending && <>(กำลังบันทึก...) </>}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {tableData.length > 0 && (
@@ -322,25 +415,48 @@ const confirmSaveToDatabase = async () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {(isEditing ? editedData : tableData).map((row, rowIndex) => (
-                    <tr 
-                      key={rowIndex} 
-                      className={`${row["หมายเหตุ"]?.toString().includes("เพิ่มแถวโดยระบบ") ? "bg-yellow-100" : ""}`}
-                    >
-                      {Object.entries(row).map(([key, value], cellIndex) => (
-                        <td key={`${rowIndex}-${cellIndex}`} className="px-6 py-4 whitespace-nowrap">
-                          {isEditing ? (
-                            <EditableCell
-                              value={value}
-                              onChange={(newValue) => handleCellChange(rowIndex, key, newValue)}
-                            />
-                          ) : (
-                            value
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
+                  {(isEditing ? editedData : tableData).map((row, rowIndex) => {
+                    const isSystemGenerated = row["หมายเหตุ"]?.toString().includes("เพิ่มแถวโดยระบบ");
+                    const isPreviousSystemGenerated = rowIndex > 0 && 
+                      tableData[rowIndex-1]["หมายเหตุ"]?.toString().includes("เพิ่มแถวโดยระบบ");
+                  
+                    return (
+                      <React.Fragment key={`row-${rowIndex}`}>
+                        <tr 
+                          className={`relative ${
+                            isSystemGenerated 
+                              ? "bg-yellow-100 border-t-2 border-orange-300" 
+                              : isPreviousSystemGenerated 
+                                ? "bg-yellow-50 border-b-2 border-orange-300"
+                                : ""
+                          }`}
+                        >
+                          {Object.entries(row).map(([key, value], cellIndex) => (
+                            <td key={`cell-${rowIndex}-${cellIndex}`} className="px-6 py-4 whitespace-nowrap">
+                              {isSystemGenerated && cellIndex === 0 && (
+                                <div className="absolute -left-1 top-1 -translate-y-1/2">
+                                  <div className="bg-orange-400 text-white text-xs px-2 py-1 rounded-r shadow-sm">
+                                    เพิ่มแถวโดยระบบ ↓
+                                  </div>
+                                </div>
+                              )}
+                              {isEditing ? (
+                                <EditableCell
+                                  value={value}
+                                  onChange={(newValue) => handleCellChange(rowIndex, key, newValue)}
+                                />
+                              ) : (
+                                value
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                        {isSystemGenerated && (
+                          <tr key={`separator-${rowIndex}`} className="h-1 bg-gradient-to-r from-orange-200 to-transparent" />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -368,12 +484,12 @@ const confirmSaveToDatabase = async () => {
       {showDatePrompt && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center">
           <div className="bg-white rounded-lg p-8 max-w-sm space-y-4">
-            <h2 className="text-lg font-bold">Select Schedule Options</h2>
+            <h2 className="text-lg font-bold">เลือกตัวเลือกตารางสอบ</h2>
             
             {/* Add Date Picker */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
-                Select Date
+                เลือกวันที่
               </label>
               <input
                 type="date"
@@ -387,7 +503,7 @@ const confirmSaveToDatabase = async () => {
             {/* Existing Time Options */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
-                Select Time Slot
+                เลือกช่วงเวลา
               </label>
               <div className="space-y-2">
                 <label className="flex items-center space-x-2">
@@ -397,7 +513,7 @@ const confirmSaveToDatabase = async () => {
                     checked={scheduleDateOption === 'ช่วงเช้า'}
                     onChange={() => setScheduleDateOption('ช่วงเช้า')}
                   />
-                  <span>ช่วงเช้า Schedule</span>
+                  <span>ช่วงเช้า</span>
                 </label>
                 <label className="flex items-center space-x-2">
                   <input
@@ -406,7 +522,7 @@ const confirmSaveToDatabase = async () => {
                     checked={scheduleDateOption === 'ช่วงบ่าย'}
                     onChange={() => setScheduleDateOption('ช่วงบ่าย')}
                   />
-                  <span>ช่วงบ่าย Schedule</span>
+                  <span>ช่วงบ่าย</span>
                 </label>
               </div>
             </div>
@@ -417,14 +533,14 @@ const confirmSaveToDatabase = async () => {
                 onClick={cancelSaveToDatabase}
                 className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
               >
-                Cancel
+                ยกเลิก
               </button>
               <button
                 onClick={confirmSaveToDatabase}
                 disabled={!selectedDate || !scheduleDateOption}
                 className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-blue-300"
               >
-                Confirm
+                ยืนยัน
               </button>
             </div>
           </div>
