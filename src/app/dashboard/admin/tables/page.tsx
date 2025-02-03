@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useTransition, useCallback } from 'react';
+import React, { useState, useTransition, useCallback, useEffect } from 'react';
 import { parseExcelFile } from '@/app/lib/excel-wrapper';
 import { utils as XLSXUtils, write as XLSXWrite } from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import ImportProgress from '@/app/components/ui/import-progress';
-import { useDropzone } from 'react-dropzone';
+import { FileUpload } from './components/file-upload';
+import { storage } from '@/app/lib/storage';
 
 interface TableData {
   [key: string]: string | number | null | boolean;
@@ -50,91 +51,22 @@ const fillSequenceAndSubject = (data: TableData[]) => {
   });
 };
 
-const FileUpload = ({ onFileUpload }: { onFileUpload: (file: File) => void }) => {
-  // Add state persistence
-  const [fileName, setFileName] = useState<string>(() => {
-    // Check if we have a stored filename
-    if (typeof window !== 'undefined') {
-      const stored = sessionStorage.getItem('lastUploadedFile');
-      return stored || '';
-    }
-    return '';
-  });
-  
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles?.length > 0) {
-      const file = acceptedFiles[0];
-      // Store filename in state and session
-      setFileName(file.name);
-      sessionStorage.setItem('lastUploadedFile', file.name);
-      onFileUpload(file);
-      toast.success(`อัพโหลดไฟล์ ${file.name} สำเร็จ`);
-    }
-  }, [onFileUpload]);
+// Update storage keys
+const STORAGE_KEYS = {
+  FILE_NAME: 'lastUploadedFile',
+  TABLE_DATA: 'tableData',
+  EDITED_DATA: 'editedData', 
+  ORIGINAL_DATA: 'originalData',
+  IS_EDITING: 'isEditing',
+  FILE_CONTENT: 'lastFileContent' // Add key for file content
+} as const;
 
-  // Rest of the component remains the same
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-      'application/vnd.ms-excel': ['.xls']
-    },
-    multiple: false
-  });
-
-  return (
-    <div className="relative">
-      <div {...getRootProps()} className={`
-        flex items-center gap-3 px-4 py-2
-        border-2 border-dashed rounded-lg cursor-pointer
-        transition-all duration-200
-        ${fileName ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'}
-        ${isDragActive ? 'border-blue-400 bg-blue-50 scale-102' : ''}
-      `}>
-        <input {...getInputProps()} />
-        
-        <svg 
-          className={`w-5 h-5 ${fileName ? 'text-green-500' : 'text-gray-400'}`}
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24"
-        >
-          {fileName ? (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          ) : (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          )}
-        </svg>
-
-        <span className={`text-sm ${fileName ? 'text-green-600' : 'text-gray-600'}`}>
-          {fileName 
-            ? `ไฟล์ที่เลือก: ${fileName}`
-            : 'คลิกหรือลากไฟล์มาวาง (.xlsx, .xls)'}
-        </span>
-      </div>
-
-      {isDragActive && (
-        <div className="fixed inset-0 bg-blue-500/10 backdrop-blur-sm z-50 pointer-events-none">
-          <div className="flex items-center justify-center h-full">
-            <div className="bg-white p-6 rounded-lg shadow-xl border-2 border-blue-500 border-dashed animate-pulse">
-              <div className="text-xl text-blue-500 flex items-center gap-2">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                วางไฟล์ที่นี่
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+// Replace storage functions
+const saveToStorage = (key: string, data: any) => storage.set(key, data);
+const loadFromStorage = (key: string) => storage.get(key);
 
 export default function TablePage() {
+  // Initialize states with stored values
   const [tableData, setTableData] = useState<TableData[]>([]);
   const [editedData, setEditedData] = useState<TableData[]>([]);
   const [originalData, setOriginalData] = useState<TableData[]>([]);
@@ -147,17 +79,85 @@ export default function TablePage() {
   const [importStage, setImportStage] = useState('');
   const [importLogs, setImportLogs] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const [lastUploadedFile, setLastUploadedFile] = useState('');
 
+  // Update the useEffect for initial data load
+  useEffect(() => {
+    const init = async () => {
+      try {
+        // Load saved file name first
+        const savedFileName = sessionStorage.getItem('lastUploadedFile') || '';
+        setLastUploadedFile(savedFileName);
+
+        // Load saved table data
+        const savedTableData = loadFromStorage(STORAGE_KEYS.TABLE_DATA);
+        if (savedTableData && savedTableData.length > 0) {
+          setTableData(savedTableData);
+          
+          // Load other related states
+          const savedEditedData = loadFromStorage(STORAGE_KEYS.EDITED_DATA);
+          const savedOriginalData = loadFromStorage(STORAGE_KEYS.ORIGINAL_DATA); 
+          const savedIsEditing = loadFromStorage(STORAGE_KEYS.IS_EDITING);
+
+          if (savedEditedData) setEditedData(savedEditedData);
+          if (savedOriginalData) setOriginalData(savedOriginalData);
+          if (savedIsEditing) setIsEditing(savedIsEditing);
+        }
+      } catch (error) {
+        console.error('Error loading saved data:', error);
+        // Clear potentially corrupted storage
+        sessionStorage.removeItem('lastUploadedFile');
+        Object.values(STORAGE_KEYS).forEach(key => storage.remove(key));
+      }
+    };
+
+    init();
+  }, []); // Empty dependency array for initial load only
+
+  // Remove the separate sessionStorage useEffect since we handle it in init()
+
+  // Save state changes
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.TABLE_DATA, tableData);
+    saveToStorage(STORAGE_KEYS.EDITED_DATA, editedData);
+    saveToStorage(STORAGE_KEYS.ORIGINAL_DATA, originalData);
+    saveToStorage(STORAGE_KEYS.IS_EDITING, isEditing);
+  }, [tableData, editedData, originalData, isEditing]);
+
+  // Update handleFileUpload to handle both file and storage
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       try {
         const data = await parseExcelFile(file);
+        
+        if (!data || data.length === 0) {
+          throw new Error('No valid data found in file');
+        }
+
+        // Save all states
         setTableData(data);
-        toast.success('Excel file imported successfully!');
+        setEditedData([]);
+        setOriginalData([]);
+        setIsEditing(false);
+        setLastUploadedFile(file.name);
+
+        // Save to storage
+        sessionStorage.setItem('lastUploadedFile', file.name);
+        saveToStorage(STORAGE_KEYS.TABLE_DATA, data);
+        saveToStorage(STORAGE_KEYS.EDITED_DATA, []);
+        saveToStorage(STORAGE_KEYS.ORIGINAL_DATA, []);
+        saveToStorage(STORAGE_KEYS.IS_EDITING, false);
+        
+        toast.success(`นำเข้าไฟล์ ${file.name} สำเร็จ!`);
       } catch (error) {
         console.error('Error importing file:', error);
-        toast.error('Error importing file');
+        toast.error('เกิดข้อผิดพลาดในการนำเข้าไฟล์');
+        
+        // Clear storage on error
+        sessionStorage.removeItem('lastUploadedFile');
+        setLastUploadedFile('');
+        setTableData([]);
       }
     }
   };
@@ -346,6 +346,7 @@ const addMissingRoomEntries = () => {
             <div className="w-[600px] p-12 rounded-xl bg-white/50 backdrop-blur-sm shadow-lg border-2 border-dashed border-gray-200">
               <FileUpload 
                 onFileUpload={(file) => handleFileUpload({ target: { files: [file] } } as any)} 
+                defaultFileName={lastUploadedFile} // Use state instead of direct sessionStorage access
               />
             </div>
           </div>
@@ -353,6 +354,7 @@ const addMissingRoomEntries = () => {
           <div className="flex items-center gap-4">
             <FileUpload 
               onFileUpload={(file) => handleFileUpload({ target: { files: [file] } } as any)} 
+              defaultFileName={lastUploadedFile} // Use state here as well
             />
             {tableData.length > 0 && (
               <>
