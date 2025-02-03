@@ -95,20 +95,20 @@ model SubjectGroup {
 }
 
 model Invigilator {
-  id            String     @id @default(cuid()) @map("InvigilatorID")
-  name          String
-  type          String     @default("บุคลากร")
-  departmentId  String?    // Make optional first
-  department    Department? @relation(fields: [departmentId], references: [id]) // Optional relation
-  professorId   String?
-  professor     Professor? @relation(fields: [professorId], references: [id])
-  schedules     Schedule[]
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  userId        String?    @unique
-  user          User?      @relation(fields: [userId], references: [id])
-  quota         Int        @default(4)
-  assignedQuota Int        @default(0)
+  id             String     @id @default(cuid()) @map("InvigilatorID")
+  name           String
+  type           String     @default("บุคลากร")
+  departmentId   String     // Required now since we need department assignment
+  department     Department @relation(fields: [departmentId], references: [id])
+  professorId    String?    @unique // Optional since not all invigilators are professors
+  professor      Professor? @relation(fields: [professorId], references: [id])
+  schedules      Schedule[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  userId         String?    @unique
+  user           User?      @relation(fields: [userId], references: [id])
+  quota          Int        @default(4)     // Maximum assignments allowed
+  assignedQuota  Int        @default(0)     // Current number of assignments
 
   @@index([departmentId])
   @@index([professorId])
@@ -166,6 +166,7 @@ model Schedule {
 model Department {
   id          String       @id @default(cuid()) @map("DepartmentID")
   name        String       @unique
+  code        String       @unique
   subjects    Subject[]
   professors  Professor[]
   invigilators Invigilator[]
@@ -189,7 +190,7 @@ model Room {
   roomNumber String
   schedules  Schedule[] // Add relation to Schedule
   createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  updatedAt  DateTime   @default(now())
 
   @@unique([building, roomNumber]) // Add unique constraint for building + roomNumber combination
 }

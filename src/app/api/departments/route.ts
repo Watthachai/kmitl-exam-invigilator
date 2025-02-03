@@ -4,8 +4,14 @@ import prisma from '@/app/lib/prisma';
 export async function GET() {
   try {
     const departments = await prisma.department.findMany({
-      orderBy: {
-        name: 'asc'
+      include: {
+        _count: {
+          select: {
+            subjects: true,
+            professors: true,
+            invigilators: true
+          }
+        }
       }
     });
 
@@ -21,28 +27,35 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { name } = body;
-
-    if (!name) {
-      return NextResponse.json(
-        { error: 'Department name is required' },
-        { status: 400 }
-      );
+    const { name, code } = await request.json();
+    
+    // Validate
+    if (!name || !code) {
+      return NextResponse.json({ error: 'Name and code are required' }, { status: 400 });
     }
 
-    const department = await prisma.department.create({
-      data: {
-        name,
-      },
+    // Check unique
+    const existing = await prisma.department.findFirst({
+      where: {
+        OR: [
+          { name },
+          { code }
+        ]
+      }
     });
 
-    return NextResponse.json(department, { status: 201 });
+    if (existing) {
+      return NextResponse.json({ error: 'Department with this name or code already exists' }, { status: 400 });
+    }
+
+    // Create
+    const department = await prisma.department.create({
+      data: { name, code }
+    });
+
+    return NextResponse.json(department);
   } catch (error) {
     console.error('Error creating department:', error);
-    return NextResponse.json(
-      { error: 'Failed to create department' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create department' }, { status: 500 });
   }
 }

@@ -64,19 +64,35 @@ export const options: NextAuthOptions = {
      * Perfect for automatically creating an Invigilator record linked to the user.
      */
     async createUser({ user }) {
-      // Only create an Invigilator if the user has a kmitl email (or any condition you choose).
-      if (user.email && user.email.endsWith("@kmitl.ac.th")) {
-        const existingInvigilator = await prisma.invigilator.findUnique({
-          where: { userId: user.id },
+      if (user.email?.endsWith("@kmitl.ac.th")) {
+        // Get or create default department
+        let defaultDepartment = await prisma.department.findFirst({
+          where: { code: "00" }
         });
 
-        if (!existingInvigilator) {
+        if (!defaultDepartment) {
+          defaultDepartment = await prisma.department.create({
+            data: {
+              name: "ส่วนกลาง",
+              code: "00"
+            }
+          });
+        }
+
+        const existingInvigilator = await prisma.invigilator.findUnique({
+          where: { userId: user.id }
+        });
+
+        if (!existingInvigilator && defaultDepartment) {
           await prisma.invigilator.create({
             data: {
               name: user.name ?? "Unknown",
+              type: "บุคลากร",
               userId: user.id,
-              // Fill in other necessary fields (positionType, etc.)
-            },
+              departmentId: defaultDepartment.id,
+              quota: 4,
+              assignedQuota: 0
+            }
           });
         }
       }

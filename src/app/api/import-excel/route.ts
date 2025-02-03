@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/app/lib/prisma';
 import { ExamData } from '@/app/types';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { Professor, Department, Invigilator } from '@prisma/client';
+import { departments } from '@/app/lib/data/departments';
 
 interface ImportRequest {
   data: ExamData[];
@@ -9,100 +10,195 @@ interface ImportRequest {
   examDate: string;
 }
 
-// Define department mappings with arrays
-const departmentMappings = [
-  { codes: ['00'], name: 'ส่วนกลาง' },
-  { codes: ['01'], name: 'วิศวกรรมโทรคมนาคม' },
-  { codes: ['02'], name: 'วิศวกรรมไฟฟ้า' },
-  { codes: ['04', '34', '10', '104', '133'], name: 'วิศวกรรมอิเล็กทรอนิกส์' },
-  { codes: ['06', '066', '068', '306', '00672', '106', '116', '121'], name: 'วิศวกรรมการวัดคุม' },
-  { codes: ['05'], name: 'วิศวกรรมเครื่องกล' },
-  { codes: ['07'], name: 'วิศวกรรมคอมพิวเตอร์' },
-  { codes: ['09'], name: 'วิศวกรรมโยธา' },
-  { codes: ['11', '21'], name: 'วิศวกรรมอุตสาหการ' },
-  { codes: ['12'], name: 'วิศวกรรมเคมี' },
-  // Add new departments
-  { codes: ['03'], name: 'วิศวกรรมไฟฟ้าสื่อสารและอิเล็กทรอนิกส์' },
-  { codes: ['08'], name: 'วิศวกรรมเครื่องมือและวัสดุ' },
-  { codes: ['13'], name: 'วิศวกรรมอาหาร' },
-  { codes: ['14'], name: 'วิศวกรรมชีวการแพทย์' },
-  { codes: ['90', '91', '92', '93', '94', '95'], name: 'วิชาพื้นฐาน' }
-];
 
-// Create lookup map
+// Create validated department mappings with unique codes
+const departmentMappings = departments.map(dept => ({
+  name: dept.name,
+  codes: [dept.code]
+}));
+
+export async function GET() {
+  const departments = await prisma.department.findMany();
+  return NextResponse.json(departments);
+}
+
+export async function createDepartment(request: Request) {
+  try {
+    const { name, code } = await request.json();
+    
+    // Check for existing department with same code or name
+    const existing = await prisma.department.findFirst({
+      where: {
+        OR: [
+          { code },
+          { name }
+        ]
+      }
+    });
+
+    if (existing) {
+      return NextResponse.json({ 
+        error: 'Department with this code or name already exists' 
+      }, { status: 400 });
+    }
+
+    const department = await prisma.department.create({
+      data: { name, code }
+    });
+    return NextResponse.json(department);
+  } catch (error) {
+    console.error('Error creating department:', error);
+    return NextResponse.json({ 
+      error: 'Failed to create department' 
+    }, { status: 500 });
+  }
+}
+
+// Create lookup map with validation for unique codes
 const departmentMap: Record<string, string> = {};
 departmentMappings.forEach(mapping => {
   mapping.codes.forEach(code => {
+    if (departmentMap[code]) {
+      console.warn(`Duplicate department code found: ${code}`);
+    }
     departmentMap[code] = mapping.name;
   });
 });
 
-
-// Add helper function to get department code
+// Update getDepartmentCode to use code lookup first
 function getDepartmentCode(subjectCode: string): string {
-  for (const dept of departmentMappings) {
-    const matchedCode = dept.codes.find(code => 
-      subjectCode.startsWith(code.padStart(2, '0'))
-    );
-    if (matchedCode) {
+  const firstTwoDigits = subjectCode.substring(0, 2);
+  console.log(`Looking up department for subject code: ${subjectCode}`);
+
+  // First try exact match on department code
+  const exactMatch = departments.find(dept => dept.code === firstTwoDigits);
+  if (exactMatch) {
+    console.log(`Found exact department match: ${exactMatch.name}`);
+    return exactMatch.name;
+  }
+
+  // Then try prefix match
+  for (const dept of departments) {
+    if (subjectCode.startsWith(dept.code.padStart(2, '0'))) {
+      console.log(`Found prefix department match: ${dept.name}`);
       return dept.name;
     }
   }
-  return 'ส่วนกลาง'; // Default department
+
+  console.log(`No department match found, using default department`);
+  return 'ส่วนกลาง';
 }
 
+async function createProfessorAsInvigilator(
+  professor: Professor, 
+  department: Department
+): Promise<Invigilator> {
+  return await prisma.invigilator.upsert({
+    where: { 
+      professorId: professor.id,
+    },
+    create: {
+      name: professor.name,
+      type: 'อาจารย์',
+      department: {
+        connect: { id: department.id }
+      },
+      professor: {
+        connect: { id: professor.id }
+      },
+      quota: 4,
+      assignedQuota: 0
+    },
+    update: {
+      name: professor.name,
+      department: {
+        connect: { id: department.id }
+      }
+    }
+  });
+}
+
+// Update findOrCreateProfessors function to use transaction properly
 async function findOrCreateProfessors(names: string[], subjectCode: string) {
   const professors = [];
-  const departmentName = getDepartmentCode(subjectCode);
-
-  // First ensure department exists
-  let department = await prisma.department.findUnique({
-    where: { name: departmentName }
+  const deptCode = subjectCode.substring(0, 2);
+  const department = await prisma.department.findFirst({
+    where: { code: deptCode }
   });
 
   if (!department) {
-    department = await prisma.department.create({
-      data: { name: departmentName }
-    });
+    throw new Error(`Department not found for code: ${deptCode}`);
   }
 
   for (const name of names) {
     const trimmedName = name.trim();
-    const professor = await prisma.professor.findFirst({
-      where: { name: trimmedName }
-    });
-    
-    if (!professor) {
-      const newProfessor = await prisma.professor.create({
-        data: {
+    const result = await prisma.$transaction(async (prismaClient) => {
+      const professor = await prismaClient.professor.upsert({
+        where: { name: trimmedName },
+        create: {
           name: trimmedName,
+          departmentId: department.id,
+        },
+        update: {}
+      });
+
+      const invigilator = await prismaClient.invigilator.upsert({
+        where: { 
+          professorId: professor.id,
+        },
+        create: {
+          name: professor.name,
+          type: 'อาจารย์',
           department: {
-            connect: { 
-              name: departmentName // Connect by name instead of id
-            }
+            connect: { id: department.id }
+          },
+          professor: {
+            connect: { id: professor.id }
+          },
+          quota: 4,
+          assignedQuota: 0
+        },
+        update: {
+          name: professor.name,
+          department: {
+            connect: { id: department.id }
           }
         }
       });
-      professors.push(newProfessor);
-    } else {
-      professors.push(professor);
-    }
+      
+      return {
+        professor,
+        invigilator
+      };
+    });
+
+    professors.push(result.professor);
   }
+  
   return professors;
 }
 
 // Add this function to find or create default invigilator
-async function getDefaultInvigilator() {
+async function getDefaultInvigilator(): Promise<Invigilator> {
+  const defaultDepartment = await prisma.department.findFirst();
+  if (!defaultDepartment) {
+    throw new Error('No default department found');
+  }
+
   const defaultInvigilator = await prisma.invigilator.findFirst();
   if (!defaultInvigilator) {
     return await prisma.invigilator.create({
       data: {
         name: "Default Invigilator",
-        type: "INTERNAL"
+        type: "บุคลากร",
+        department: {
+          connect: { id: defaultDepartment.id }
+        },
+        quota: 4,
+        assignedQuota: 0
       }
     });
   }
-  console.log('Default invigilator:', defaultInvigilator);
   return defaultInvigilator;
 }
 
@@ -117,12 +213,16 @@ async function upsertSubject(subjectCode: string, subjectName: string) {
 
   if (!department) {
     department = await prisma.department.create({
-      data: { name: departmentName }
+      data: { 
+        name: 'No department found',
+        code: '99'
+      }
     });
+    console.warn(`Department not found for ${departmentName}, using default department`);
   }
 
   // Then upsert subject with department ID
-  return await prisma.subject.upsert({
+  const subject = await prisma.subject.upsert({
     where: { code: subjectCode },
     create: {
       code: subjectCode,
@@ -134,27 +234,58 @@ async function upsertSubject(subjectCode: string, subjectName: string) {
       departmentId: department.id
     }
   });
+
+  return { subject, department };
 }
 
-async function processExamData(examData: ExamData[], scheduleOption: string, examDate: Date) {
-  const defaultInvigilator = await getDefaultInvigilator();
-  const processedSchedules = new Set(); // Track processed schedules
+async function getAvailableInvigilator(departmentId: string): Promise<Invigilator | null> {
+  return await prisma.invigilator.findFirst({
+    where: {
+      departmentId,
+      assignedQuota: {
+        lt: 4 // Less than quota
+      }
+    },
+    orderBy: {
+      assignedQuota: 'asc'
+    }
+  });
+}
 
+// Update processExamData to use validateExamData
+async function processExamData(examData: ExamData[], scheduleOption: string, examDate: Date) {
+  // Validate inputs
+  if (!Array.isArray(examData)) {
+    throw new Error('Invalid exam data: expected array');
+  }
+
+  if (!examData.every(validateExamData)) {
+    throw new Error('Invalid exam data format');
+  }
+
+  const defaultInvigilator = await getDefaultInvigilator();
+  const processedSchedules = new Set();
+
+  // Process each row
   for (const row of examData) {
     try {
-      // Get department from subject code
-      const subjectCode = row.วิชา.trim().split(' ')[0];
-      
-      const professorNames = row.ผู้สอน.split(',');
-      const professors = await findOrCreateProfessors(professorNames, subjectCode);
-
       await prisma.$transaction(async (tx) => {
-        // Process Subject with dynamic departmentId
-        const [code, ...nameParts] = row.วิชา.trim().split(' ');
-        const subject = await upsertSubject(code.trim(), nameParts.join(' '));
+        // Parse subject details once at the start
+        const [subjectCode, ...subjectNameParts] = row.วิชา.trim().split(' ');
+        const trimmedSubjectCode = subjectCode.trim();
+        
+        // Get professors for the subject
+        const professorNames = row.ผู้สอน.split(',');
+        const professors = await findOrCreateProfessors(professorNames, trimmedSubjectCode);
+
+        // Create or update subject
+        const { subject, department } = await upsertSubject(
+          trimmedSubjectCode, 
+          subjectNameParts.join(' ')
+        );
 
         // Process Room
-        const room = await tx.room.upsert({
+        const room = await prisma.room.upsert({
           where: {
             building_roomNumber: {
               building: row.อาคาร.trim(),
@@ -168,13 +299,13 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
           update: {}
         });
 
-        // Update SubjectGroup creation to use upsert
-        const subjectGroup = await tx.subjectGroup.upsert({
+        // Create or update subject group
+        const subjectGroup = await prisma.subjectGroup.upsert({
           where: {
             subjectId_groupNumber_year: {
-              subjectId: subject.id,
-              groupNumber: row.กลุ่ม.trim(),
-              year: parseInt(row['ชั้นปี'].trim())
+            subjectId: subject.id,
+            groupNumber: row.กลุ่ม.trim(),
+            year: parseInt(row['ชั้นปี'].trim())
             }
           },
           create: {
@@ -190,10 +321,10 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
           }
         });
 
-        // Update professor linking logic
+        // Link additional professors
         if (professors.length > 1) {
           for (let i = 1; i < professors.length; i++) {
-            await tx.subjectGroupProfessor.upsert({
+            await prisma.subjectGroupProfessor.upsert({
               where: {
                 subjectGroupId_professorId: {
                   subjectGroupId: subjectGroup.id,
@@ -205,33 +336,22 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
                 subjectGroupId: subjectGroup.id,
                 professorId: professors[i].id
               },
-              update: {} 
+              update: {}
             });
           }
         }
 
-        // Create unique key for schedule
+        // Create unique schedule key and check for duplicates
         const scheduleKey = `${examDate}_${scheduleOption}_${row.เวลา}_${row.อาคาร}_${row.ห้อง}_${subjectGroup.id}`;
-        
-        // Check if schedule already processed
         if (processedSchedules.has(scheduleKey)) {
           console.log(`Skipping duplicate schedule: ${scheduleKey}`);
           return;
         }
 
         const [startTime, endTime] = row.เวลา.split(' - ');
-        
-        // Log schedule creation attempt
-        console.log('Attempting to create schedule:', {
-          date: examDate,
-          option: scheduleOption,
-          startTime,
-          endTime,
-          room: room.id,
-          subjectGroup: subjectGroup.id
-        });
 
-        await tx.schedule.upsert({
+        // Create or update schedule
+        const schedule = await prisma.schedule.upsert({
           where: {
             date_scheduleDateOption_startTime_endTime_roomId_subjectGroupId: {
               date: examDate,
@@ -249,84 +369,188 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
             endTime: new Date(`1970-01-01T${endTime}`),
             roomId: room.id,
             subjectGroupId: subjectGroup.id,
-            invigilatorId: defaultInvigilator.id
+            invigilatorId: (await getAvailableInvigilator(department.id))?.id || defaultInvigilator.id
           },
-          update: {} // No updates needed for duplicates
+          update: {}
         });
 
+        // Update invigilator assignment count
+        await updateInvigilatorQuota(schedule.invigilatorId);
+
         processedSchedules.add(scheduleKey);
-        
       }, {
+        maxWait: 10000,
         timeout: 10000
       });
     } catch (error) {
-      const isPrismaError = error instanceof Error && 'code' in error;
-      if (isPrismaError && error instanceof PrismaClientKnownRequestError) {
-        // Handle known Prisma errors
-        const message = error.code === 'P2002' ? 
-          'Duplicate entry found' : 
-          error.message;
-        throw new Error(`Database error: ${message}`);
-      }
-      throw error;
+      const txError = validateTransactionError(error);
+      console.error('Row processing failed:', txError);
+      throw txError;
     }
   }
 }
 
+// Update seedDepartments function to handle the initial department creation
+async function seedDepartments() {
+  try {
+    console.log('Starting department seeding...');
+    
+    await prisma.$transaction(async (tx) => {
+      // Create default department
+      await tx.department.upsert({
+        where: { code: '00' },
+        create: {
+          name: 'ส่วนกลาง',
+          code: '00'
+        },
+        update: {}
+      });
+
+      // Create other departments
+      for (const dept of departments) {
+        await tx.department.upsert({
+          where: { code: dept.code },
+          create: {
+            name: dept.name,
+            code: dept.code
+          },
+          update: { name: dept.name }
+        });
+      }
+    });
+
+    const deptCount = await prisma.department.count();
+    console.log(`Department seeding completed. Total: ${deptCount}`);
+    return true;
+
+  } catch (error) {
+    console.error('Error seeding departments:', error);
+    throw error;
+  }
+}
+
+// Update POST handler with proper error response
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as ImportRequest;
-    
-    // Validate required fields
-    if (!body?.data?.length) {
-      return NextResponse.json({ error: 'Missing exam data' }, { status: 400 });
-    }
-    if (!body.scheduleOption) {
-      return NextResponse.json({ error: 'Missing schedule option' }, { status: 400 });
-    }
-    if (!body.examDate) {
-      return NextResponse.json({ error: 'Missing exam date' }, { status: 400 });
-    }
-
-    // Validate each exam data entry
-    const invalidRows = body.data.filter(row => !validateExamData(row));
-    if (invalidRows.length > 0) {
-      return NextResponse.json({
-        error: 'Invalid exam data entries found',
-        invalidRows
+    // Input validation
+    if (!request.body) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'No request body' 
       }, { status: 400 });
     }
 
-    await processExamData(body.data, body.scheduleOption, new Date(body.examDate));
-    return NextResponse.json({ message: 'Data imported successfully' });
+    let body: ImportRequest;
+    try {
+      body = await request.json();
+    } catch (error) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Invalid JSON in request body' 
+      }, { status: 400 });
+    }
+
+    if (!body?.data?.length || !body.scheduleOption || !body.examDate) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Missing required fields' 
+      }, { status: 400 });
+    }
+
+    // Process data in transaction
+    try {
+      await prisma.$transaction(async (tx) => {
+        await seedDepartments();
+        await processExamData(
+          body.data,
+          body.scheduleOption,
+          new Date(body.examDate)
+        );
+      }, {
+        maxWait: 30000, // 30s max wait
+        timeout: 30000  // 30s timeout
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Data imported successfully'
+      });
+
+    } catch (txError) {
+      // Handle transaction errors
+      console.error('Transaction failed:', txError);
+      throw new Error(`Transaction failed: ${txError.message}`);
+    }
 
   } catch (error) {
-    // Type-safe error handling
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : 'Unknown error occurred';
+    // Root error handler
+    console.error('Import failed:', error);
+    
+    // Format error response
+    const errorResponse = {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      details: process.env.NODE_ENV === 'development' ? error : undefined
+    };
 
-    console.error('Import error:', {
-      message: errorMessage,
-      stack: error instanceof Error ? error.stack : undefined
-    });
-
-    return NextResponse.json({
-      error: 'Import failed',
-      details: errorMessage
-    }, { status: 500 });
+    return NextResponse.json(errorResponse, { status: 500 });
   }
 }
 
+// Add API endpoint for invigilator stats
+export async function getInvigilatorStats(departmentId?: string) {
+  return await prisma.invigilator.findMany({
+    where: departmentId ? { departmentId } : undefined,
+    include: {
+      professor: {
+        include: {
+          subjectGroups: true
+        }
+      },
+      schedules: true,
+      department: true
+    }
+  });
+}
+async function updateInvigilatorQuota(invigilatorId: string) {
+  const scheduleCount = await prisma.schedule.count({
+    where: { invigilatorId }
+  });
+
+  await prisma.invigilator.update({
+    where: { id: invigilatorId },
+    data: { assignedQuota: scheduleCount }
+  });
+}
+
+// Add validation helper
 function validateExamData(data: ExamData): boolean {
-  return !!(
-    data.วิชา?.trim() &&
-    data.กลุ่ม?.trim() &&
-    data['ชั้นปี']?.trim() &&
-    data['นศ.']?.trim() &&
-    data.เวลา?.trim() &&
-    data['ผู้สอน']?.trim() &&
-    data.อาคาร?.trim() &&
-    data.ห้อง?.trim()
-  );
+  try {
+    return !!(
+      data.วิชา?.trim() &&
+      data.กลุ่ม?.trim() &&
+      data['ชั้นปี']?.trim() &&
+      data['นศ.']?.trim() &&
+      data.เวลา?.trim() &&
+      data['ผู้สอน']?.trim() &&
+      data.อาคาร?.trim() &&
+      data.ห้อง?.trim()
+    );
+  } catch (error) {
+    console.error('Validation error:', error);
+    return false;
+  }
+}
+
+// Add this validation helper
+function validateTransactionError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+  
+  if (typeof error === 'string') {
+    return new Error(error);
+  }
+  
+  return new Error('Unknown transaction error occurred');
 }
