@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/app/lib/prisma';
 import { ExamData } from '@/app/types';
-import { Professor, Department, Invigilator } from '@prisma/client';
+import { Invigilator } from '@prisma/client';
 import { departments } from '@/app/lib/data/departments';
 
 interface ImportRequest {
@@ -89,34 +89,7 @@ function getDepartmentCode(subjectCode: string): string {
   return 'ส่วนกลาง';
 }
 
-async function createProfessorAsInvigilator(
-  professor: Professor, 
-  department: Department
-): Promise<Invigilator> {
-  return await prisma.invigilator.upsert({
-    where: { 
-      professorId: professor.id,
-    },
-    create: {
-      name: professor.name,
-      type: 'อาจารย์',
-      department: {
-        connect: { id: department.id }
-      },
-      professor: {
-        connect: { id: professor.id }
-      },
-      quota: 4,
-      assignedQuota: 0
-    },
-    update: {
-      name: professor.name,
-      department: {
-        connect: { id: department.id }
-      }
-    }
-  });
-}
+// Remove unused function since invigilator creation is handled inline
 
 // Update findOrCreateProfessors function to use transaction properly
 async function findOrCreateProfessors(names: string[], subjectCode: string) {
@@ -252,9 +225,8 @@ async function getAvailableInvigilator(departmentId: string): Promise<Invigilato
   });
 }
 
-// Update processExamData to use validateExamData
+// Update processExamData to use prismaClient
 async function processExamData(examData: ExamData[], scheduleOption: string, examDate: Date) {
-  // Validate inputs
   if (!Array.isArray(examData)) {
     throw new Error('Invalid exam data: expected array');
   }
@@ -266,26 +238,23 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
   const defaultInvigilator = await getDefaultInvigilator();
   const processedSchedules = new Set();
 
-  // Process each row
   for (const row of examData) {
     try {
-      await prisma.$transaction(async (tx) => {
-        // Parse subject details once at the start
+      await prisma.$transaction(async (prismaClient) => {
+        // Use prismaClient instead of prisma for all database operations
         const [subjectCode, ...subjectNameParts] = row.วิชา.trim().split(' ');
         const trimmedSubjectCode = subjectCode.trim();
         
-        // Get professors for the subject
         const professorNames = row.ผู้สอน.split(',');
         const professors = await findOrCreateProfessors(professorNames, trimmedSubjectCode);
 
-        // Create or update subject
         const { subject, department } = await upsertSubject(
           trimmedSubjectCode, 
           subjectNameParts.join(' ')
         );
 
         // Process Room
-        const room = await prisma.room.upsert({
+        const room = await prismaClient.room.upsert({
           where: {
             building_roomNumber: {
               building: row.อาคาร.trim(),
@@ -300,7 +269,7 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
         });
 
         // Create or update subject group
-        const subjectGroup = await prisma.subjectGroup.upsert({
+        const subjectGroup = await prismaClient.subjectGroup.upsert({
           where: {
             subjectId_groupNumber_year: {
             subjectId: subject.id,
@@ -324,7 +293,7 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
         // Link additional professors
         if (professors.length > 1) {
           for (let i = 1; i < professors.length; i++) {
-            await prisma.subjectGroupProfessor.upsert({
+            await prismaClient.subjectGroupProfessor.upsert({
               where: {
                 subjectGroupId_professorId: {
                   subjectGroupId: subjectGroup.id,
@@ -351,7 +320,7 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
         const [startTime, endTime] = row.เวลา.split(' - ');
 
         // Create or update schedule
-        const schedule = await prisma.schedule.upsert({
+        const schedule = await prismaClient.schedule.upsert({
           where: {
             date_scheduleDateOption_startTime_endTime_roomId_subjectGroupId: {
               date: examDate,
@@ -378,26 +347,21 @@ async function processExamData(examData: ExamData[], scheduleOption: string, exa
         await updateInvigilatorQuota(schedule.invigilatorId);
 
         processedSchedules.add(scheduleKey);
-      }, {
-        maxWait: 10000,
-        timeout: 10000
       });
-    } catch (error) {
-      const txError = validateTransactionError(error);
+    } catch (txError) {
       console.error('Row processing failed:', txError);
-      throw txError;
+      throw validateTransactionError(txError);
     }
   }
 }
 
-// Update seedDepartments function to handle the initial department creation
+// Update seedDepartments to use prismaClient
 async function seedDepartments() {
   try {
     console.log('Starting department seeding...');
     
-    await prisma.$transaction(async (tx) => {
-      // Create default department
-      await tx.department.upsert({
+    await prisma.$transaction(async (prismaClient) => {
+      await prismaClient.department.upsert({
         where: { code: '00' },
         create: {
           name: 'ส่วนกลาง',
@@ -406,9 +370,8 @@ async function seedDepartments() {
         update: {}
       });
 
-      // Create other departments
       for (const dept of departments) {
-        await tx.department.upsert({
+        await prismaClient.department.upsert({
           where: { code: dept.code },
           create: {
             name: dept.name,
@@ -425,75 +388,49 @@ async function seedDepartments() {
 
   } catch (error) {
     console.error('Error seeding departments:', error);
-    throw error;
+    throw validateTransactionError(error);
   }
 }
 
-// Update POST handler with proper error response
+// Update POST handler with proper error handling
 export async function POST(request: Request) {
   try {
-    // Input validation
     if (!request.body) {
-      return NextResponse.json({ 
-        success: false,
-        error: 'No request body' 
-      }, { status: 400 });
+      return NextResponse.json({ error: 'No request body' }, { status: 400 });
     }
 
-    let body: ImportRequest;
-    try {
-      body = await request.json();
-    } catch (error) {
-      return NextResponse.json({ 
-        success: false,
-        error: 'Invalid JSON in request body' 
-      }, { status: 400 });
-    }
-
+    const body = await request.json() as ImportRequest;
+    
     if (!body?.data?.length || !body.scheduleOption || !body.examDate) {
-      return NextResponse.json({ 
-        success: false,
-        error: 'Missing required fields' 
-      }, { status: 400 });
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Process data in transaction
-    try {
-      await prisma.$transaction(async (tx) => {
-        await seedDepartments();
-        await processExamData(
-          body.data,
-          body.scheduleOption,
-          new Date(body.examDate)
-        );
-      }, {
-        maxWait: 30000, // 30s max wait
-        timeout: 30000  // 30s timeout
-      });
+    await prisma.$transaction(async () => {
+      await seedDepartments();
+      await processExamData(
+        body.data,
+        body.scheduleOption,
+        new Date(body.examDate)
+      );
+    }, {
+      maxWait: 30000,
+      timeout: 30000
+    });
 
-      return NextResponse.json({
-        success: true,
-        message: 'Data imported successfully'
-      });
-
-    } catch (txError) {
-      // Handle transaction errors
-      console.error('Transaction failed:', txError);
-      throw new Error(`Transaction failed: ${txError.message}`);
-    }
+    return NextResponse.json({
+      success: true,
+      message: 'Data imported successfully'
+    });
 
   } catch (error) {
-    // Root error handler
-    console.error('Import failed:', error);
+    const validatedError = validateTransactionError(error);
+    console.error('Import failed:', validatedError);
     
-    // Format error response
-    const errorResponse = {
+    return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      details: process.env.NODE_ENV === 'development' ? error : undefined
-    };
-
-    return NextResponse.json(errorResponse, { status: 500 });
+      error: validatedError.message,
+      details: process.env.NODE_ENV === 'development' ? validatedError : undefined
+    }, { status: 500 });
   }
 }
 
@@ -542,7 +479,7 @@ function validateExamData(data: ExamData): boolean {
   }
 }
 
-// Add this validation helper
+// Update error validation helper with type guard
 function validateTransactionError(error: unknown): Error {
   if (error instanceof Error) {
     return error;

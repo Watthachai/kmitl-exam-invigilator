@@ -215,7 +215,6 @@ const confirmSaveToDatabase = async () => {
   };
 
   const addMissingRoomEntries = () => {
-    // นับจำนวนห้องที่มีในข้อมูล
     const roomCount: Record<string, number> = {};
     
     tableData.forEach(row => {
@@ -225,16 +224,16 @@ const confirmSaveToDatabase = async () => {
       }
     });
   
-    // คัดลอกข้อมูลและเพิ่มแถวที่ขาด
     const newData = [...tableData];
   
     Object.entries(roomCount).forEach(([room, count]) => {
       if (count < 2) {
         const existingRow = tableData.find(row => row["ห้อง"]?.toString() === room);
         if (existingRow) {
+          const existingNote = existingRow["หมายเหตุ"]?.toString() || '';
           newData.push({
             ...existingRow,
-            isSystemGenerated: true // ใช้เพื่อแสดงไฮไลต์
+            "หมายเหตุ": existingNote ? `${existingNote}, เพิ่มแถวโดยระบบ` : "เพิ่มแถวโดยระบบ"
           });
         }
       }
@@ -326,7 +325,7 @@ const confirmSaveToDatabase = async () => {
                   {(isEditing ? editedData : tableData).map((row, rowIndex) => (
                     <tr 
                       key={rowIndex} 
-                      className={`${row.isSystemGenerated ? "bg-yellow-100" : ""}`}
+                      className={`${row["หมายเหตุ"]?.toString().includes("เพิ่มแถวโดยระบบ") ? "bg-yellow-100" : ""}`}
                     >
                       {Object.entries(row).map(([key, value], cellIndex) => (
                         <td key={`${rowIndex}-${cellIndex}`} className="px-6 py-4 whitespace-nowrap">
