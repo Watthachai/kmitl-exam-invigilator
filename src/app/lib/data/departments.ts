@@ -17,5 +17,6 @@ export const departments: Prisma.DepartmentCreateInput[] = [
   { name: 'วิศวกรรมอุตสาหการ', code: '21' },
   { name: 'วิศวกรรมเกษตร(ต่อเนื่อง)', code: '38' },
   { name: 'วิศวกรรมไฟฟ้า(ต่อเนื่อง)', code: '45' },
-  { name: 'วิศวกรรมโยธา(ต่อเนื่อง)', code: '37' }
+  { name: 'วิศวกรรมโยธา(ต่อเนื่อง)', code: '37' },
+  { name: 'ไม่มีภาควิชา', code: '99' }
 ];
