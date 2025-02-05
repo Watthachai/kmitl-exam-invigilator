@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/app/lib/prisma';
 import { ExamData } from '@/app/types';
-import { Invigilator, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { departments } from '@/app/lib/data/departments';
+import { logActivity } from '@/app/lib/activity-logger';
 
 interface ImportRequest {
   data: ExamData[];
@@ -10,198 +11,95 @@ interface ImportRequest {
   examDate: string;
 }
 
-
-// Create validated department mappings with unique codes
-const departmentMappings = departments.map(dept => ({
-  name: dept.name,
-  codes: [dept.code]
-}));
-
+// Keep only the functions we use
 export async function GET() {
   const departments = await prisma.department.findMany();
   return NextResponse.json(departments);
 }
 
-export async function createDepartment(request: Request) {
-  try {
-    const { name, code } = await request.json();
-    
-    // Check for existing department with same code or name
-    const existing = await prisma.department.findFirst({
-      where: {
-        OR: [
-          { code },
-          { name }
-        ]
-      }
-    });
-
-    if (existing) {
-      return NextResponse.json({ 
-        error: 'Department with this code or name already exists' 
-      }, { status: 400 });
-    }
-
-    const department = await prisma.department.create({
-      data: { name, code }
-    });
-    return NextResponse.json(department);
-  } catch (error) {
-    console.error('Error creating department:', error);
-    return NextResponse.json({ 
-      error: 'Failed to create department' 
-    }, { status: 500 });
-  }
-}
-
-// Create lookup map with validation for unique codes
-const departmentMap: Record<string, string> = {};
-departmentMappings.forEach(mapping => {
-  mapping.codes.forEach(code => {
-    if (departmentMap[code]) {
-      console.warn(`Duplicate department code found: ${code}`);
-    }
-    departmentMap[code] = mapping.name;
-  });
-});
-
-function getDepartmentCode(subjectCode: string): string {
-  // For subject codes starting with '01', check the substring (2,4) for department code
+// Helper function to get department name
+function getDepartmentNameFromCode(subjectCode: string): string {
   if (subjectCode.startsWith('01')) {
     const deptCode = subjectCode.substring(2, 4);
-    console.log(`Subject ${subjectCode} -> Extracted department code: ${deptCode}`);
-    
-    // First check exact match with extracted code
     const exactMatch = departments.find(dept => dept.code === deptCode);
-    if (exactMatch) {
-      console.log(`Found exact department match: ${exactMatch.name} (${deptCode})`);
-      return exactMatch.name;
-    }
-
-    // If no exact match found for 01XXXXXX pattern, return default
-    console.log(`No department match found for ${deptCode}, using default department`);
-    return 'ไม่มีภาควิชา';
+    return exactMatch ? exactMatch.name : 'ไม่มีภาควิชา';
   }
-
-  console.log(`No department match found for ${subjectCode}, using default department`);
   return 'ไม่มีภาควิชา';
 }
 
-// Remove unused function since invigilator creation is handled inline
-
-// Update findOrCreateProfessors function to use transaction properly
-async function findOrCreateProfessors(names: string[], subjectCode: string) {
+// Update findOrCreateProfessors with better department handling
+async function findOrCreateProfessors(
+  names: string[], 
+  department: { id: string, name: string },
+  prismaClient: Prisma.TransactionClient
+) {
   const professors = [];
-  const deptCode = subjectCode.substring(0, 2);
-  const department = await prisma.department.findFirst({
-    where: { code: deptCode }
-  });
 
-  if (!department) {
-    throw new Error(`Department not found for code: ${deptCode}`);
-  }
+  // Get existing professors first
+  const existingProfs = await prismaClient.professor.findMany({
+    where: { name: { in: names.map(n => n.trim()) } },
+    include: { department: true }
+  });
 
   for (const name of names) {
     const trimmedName = name.trim();
-    const result = await prisma.$transaction(async (prismaClient) => {
-      const professor = await prismaClient.professor.upsert({
-        where: { name: trimmedName },
-        create: {
-          name: trimmedName,
-          departmentId: department.id,
-        },
-        update: {}
-      });
+    const existingProf = existingProfs.find(p => p.name === trimmedName);
 
-      const invigilator = await prismaClient.invigilator.upsert({
-        where: { 
-          professorId: professor.id,
-        },
-        create: {
-          name: professor.name,
-          type: 'อาจารย์',
-          department: {
-            connect: { id: department.id }
-          },
-          professor: {
-            connect: { id: professor.id }
-          },
-          quota: 4,
-          assignedQuota: 0
-        },
-        update: {
-          name: professor.name,
-          department: {
-            connect: { id: department.id }
-          }
-        }
-      });
-      
-      return {
-        professor,
-        invigilator
-      };
+    // If professor exists but in different department, don't update department
+    const professor = await prismaClient.professor.upsert({
+      where: { name: trimmedName },
+      create: {
+        name: trimmedName,
+        departmentId: department.id,
+      },
+      update: existingProf?.departmentId ? {} : { departmentId: department.id }
     });
 
-    professors.push(result.professor);
+    // Create/update invigilator with same logic
+    await prismaClient.invigilator.upsert({
+      where: { professorId: professor.id },
+      create: {
+        name: professor.name,
+        type: 'อาจารย์',
+        department: { connect: { id: department.id } },
+        professor: { connect: { id: professor.id } },
+        quota: 4,
+        assignedQuota: 0
+      },
+      update: {
+        name: professor.name,
+        ...(existingProf?.departmentId ? {} : {
+          department: { connect: { id: department.id } }
+        })
+      }
+    });
+    
+    professors.push(professor);
   }
   
   return professors;
 }
 
-// Add this function to find or create default invigilator
-async function getDefaultInvigilator(): Promise<Invigilator> {
-  const defaultDepartment = await prisma.department.findFirst();
-  if (!defaultDepartment) {
-    throw new Error('No default department found');
-  }
-
-  const defaultInvigilator = await prisma.invigilator.findFirst();
-  if (!defaultInvigilator) {
-    return await prisma.invigilator.create({
-      data: {
-        name: "Default Invigilator",
-        type: "บุคลากร",
-        department: {
-          connect: { id: defaultDepartment.id }
-        },
-        quota: 4,
-        assignedQuota: 0
-      }
-    });
-  }
-  return defaultInvigilator;
-}
-
-// Update the subject upsert operation
-async function upsertSubject(subjectCode: string, subjectName: string) {
-  const departmentName = getDepartmentCode(subjectCode);
-  
-  // First find or create department
-  let department = await prisma.department.findUnique({
-    where: { name: departmentName }
+// Add missing upsertSubject function
+async function upsertSubject(
+  code: string, 
+  name: string, 
+  prismaClient: Prisma.TransactionClient
+) {
+  const deptName = getDepartmentNameFromCode(code);
+  const department = await prismaClient.department.findFirstOrThrow({
+    where: { name: deptName }
   });
 
-  if (!department) {
-    department = await prisma.department.create({
-      data: { 
-        name: 'ไม่มีภาควิชา',
-        code: '99'
-      }
-    });
-    console.warn(`Department not found for ${departmentName}, using default department`);
-  }
-
-  // Then upsert subject with department ID
-  const subject = await prisma.subject.upsert({
-    where: { code: subjectCode },
+  const subject = await prismaClient.subject.upsert({
+    where: { code },
     create: {
-      code: subjectCode,
-      name: subjectName,
+      code,
+      name,
       departmentId: department.id
     },
     update: {
-      name: subjectName,
+      name,
       departmentId: department.id
     }
   });
@@ -209,44 +107,36 @@ async function upsertSubject(subjectCode: string, subjectName: string) {
   return { subject, department };
 }
 
-async function getAvailableInvigilator(departmentId: string): Promise<Invigilator | null> {
-  return await prisma.invigilator.findFirst({
-    where: {
-      departmentId,
-      assignedQuota: {
-        lt: 4 // Less than quota
-      }
-    },
-    orderBy: {
-      assignedQuota: 'asc'
-    }
-  });
-}
-
-// Fix processExamData function
+// Update the processExamData function
 async function processExamData(
   examData: ExamData[], 
   scheduleOption: string, 
   examDate: Date,
-  prismaClient: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>
+  prismaClient: Prisma.TransactionClient
 ) {
   if (!Array.isArray(examData)) {
     throw new Error('Invalid exam data: expected array');
   }
 
-  const defaultInvigilator = await getDefaultInvigilator();
   const processedSchedules = new Set();
 
   for (const row of examData) {
     const [subjectCode, ...subjectNameParts] = row.วิชา.trim().split(' ');
     const trimmedSubjectCode = subjectCode.trim();
     
-    const professorNames = row.ผู้สอน.split(',');
-    const professors = await findOrCreateProfessors(professorNames, trimmedSubjectCode);
-
+    // Get subject and department first
     const { subject, department } = await upsertSubject(
       trimmedSubjectCode, 
-      subjectNameParts.join(' ')
+      subjectNameParts.join(' '),
+      prismaClient
+    );
+
+    // Pass department to findOrCreateProfessors
+    const professorNames = row.ผู้สอน.split(',');
+    const professors = await findOrCreateProfessors(
+      professorNames, 
+      department, 
+      prismaClient
     );
 
     const room = await prismaClient.room.upsert({
@@ -288,10 +178,20 @@ async function processExamData(
     const scheduleKey = `${examDate}_${scheduleOption}_${row.เวลา}_${row.อาคาร}_${row.ห้อง}_${subjectGroup.id}`;
 
     if (!processedSchedules.has(scheduleKey)) {
-      const invigilatorId = await getInvigilatorId(department.id, defaultInvigilator.id);
-      
       try {
-        const schedule = await prismaClient.schedule.upsert({
+        // Basic schedule data without invigilator
+        const scheduleData = {
+          date: examDate,
+          scheduleDateOption: scheduleOption.toUpperCase(),
+          startTime: new Date(`1970-01-01T${startTime}`),
+          endTime: new Date(`1970-01-01T${endTime}`),
+          roomId: room.id,
+          subjectGroupId: subjectGroup.id
+        };
+
+        console.log('Creating schedule:', scheduleData);
+
+        await prismaClient.schedule.upsert({
           where: {
             date_scheduleDateOption_startTime_endTime_roomId_subjectGroupId: {
               date: examDate,
@@ -302,41 +202,55 @@ async function processExamData(
               subjectGroupId: subjectGroup.id
             }
           },
-          create: {
-            date: examDate,
-            scheduleDateOption: scheduleOption.toUpperCase(),
-            startTime: new Date(`1970-01-01T${startTime}`),
-            endTime: new Date(`1970-01-01T${endTime}`),
-            roomId: room.id,
-            subjectGroupId: subjectGroup.id,
-            invigilatorId
-          },
-          update: {
-            invigilatorId
-          }
+          create: scheduleData,
+          update: {} // Empty update since invigilator will be assigned later
         });
 
-        if (schedule) {
-          await updateInvigilatorQuota(schedule.invigilatorId);
-          processedSchedules.add(scheduleKey);
-        }
+        processedSchedules.add(scheduleKey);
+        
       } catch (error) {
-        console.error('Schedule creation failed:', error);
-        throw validateTransactionError(error);
+        console.error('Schedule creation failed:', { 
+          error: error instanceof Error ? error.message : 'Unknown error',
+          scheduleKey 
+        });
+        throw error;
       }
     }
   }
 }
 
-// Add this helper function
-async function getInvigilatorId(departmentId: string, defaultId: string): Promise<string> {
-  const available = await getAvailableInvigilator(departmentId);
-  return available?.id || defaultId;
+// Add validation helper
+function validateExamData(data: ExamData): boolean {
+  if (!data || typeof data !== 'object') return false;
+  
+  return Boolean(
+    data.วิชา?.trim() &&
+    data.กลุ่ม?.trim() &&
+    data['ชั้นปี']?.toString()?.trim() &&
+    data['นศ.']?.toString()?.trim() &&
+    data.เวลา?.trim() &&
+    data['ผู้สอน']?.trim() &&
+    data.อาคาร?.trim() &&
+    data.ห้อง?.trim()
+  );
+}
+
+// Update error validation helper with type guard
+function validateTransactionError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+  
+  if (typeof error === 'string') {
+    return new Error(error);
+  }
+  
+  return new Error('An unexpected error occurred during import');
 }
 
 // Update seedDepartments to use prismaClient
 async function seedDepartments(
-  prismaClient: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>
+  prismaClient: Prisma.TransactionClient
 ) {
   try {
     console.log('Starting department seeding...');
@@ -392,6 +306,7 @@ export async function POST(request: Request) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      console.log('Starting transaction...');
       await seedDepartments(tx);
       await processExamData(
         body.data, 
@@ -399,79 +314,24 @@ export async function POST(request: Request) {
         new Date(body.examDate),
         tx
       );
+      console.log('Transaction completed');
+
+      // Log the import activity
+      await logActivity('IMPORT', `Imported ${body.data.length} exam schedules for ${body.examDate}`, tx);
+
       return { success: true };
     }, {
       maxWait: 30000,
       timeout: 60000
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json(result || { success: false });
 
   } catch (error) {
-    const validatedError = validateTransactionError(error);
+    const message = error instanceof Error ? error.message : 'An unexpected error occurred';
     return NextResponse.json({
       success: false,
-      error: validatedError.message
-    }, { 
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+      error: message
+    }, { status: 500 });
   }
-}
-
-// Add API endpoint for invigilator stats
-export async function getInvigilatorStats(departmentId?: string) {
-  return await prisma.invigilator.findMany({
-    where: departmentId ? { departmentId } : undefined,
-    include: {
-      professor: {
-        include: {
-          subjectGroups: true
-        }
-      },
-      schedules: true,
-      department: true
-    }
-  });
-}
-async function updateInvigilatorQuota(invigilatorId: string) {
-  const scheduleCount = await prisma.schedule.count({
-    where: { invigilatorId }
-  });
-
-  await prisma.invigilator.update({
-    where: { id: invigilatorId },
-    data: { assignedQuota: scheduleCount }
-  });
-}
-
-// Add validation helper
-function validateExamData(data: ExamData): boolean {
-  if (!data || typeof data !== 'object') return false;
-  
-  return Boolean(
-    data.วิชา?.trim() &&
-    data.กลุ่ม?.trim() &&
-    data['ชั้นปี']?.toString()?.trim() &&
-    data['นศ.']?.toString()?.trim() &&
-    data.เวลา?.trim() &&
-    data['ผู้สอน']?.trim() &&
-    data.อาคาร?.trim() &&
-    data.ห้อง?.trim()
-  );
-}
-
-// Update error validation helper with type guard
-function validateTransactionError(error: unknown): Error {
-  if (error instanceof Error) {
-    return error;
-  }
-  
-  if (typeof error === 'string') {
-    return new Error(error);
-  }
-  
-  return new Error('An unexpected error occurred during import');
 }

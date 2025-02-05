@@ -8,6 +8,7 @@ import { signOut } from "next-auth/react";
 import { Overview } from '@/app/dashboard/admin/components/dashboard/overview';
 import { ActivityFeed } from '@/app/dashboard/admin/components/dashboard/activity-feed';
 import { StatsOverview } from '@/app/dashboard/admin/components/dashboard/stats-overview';
+import { QuickActions } from '@/app/dashboard/admin/components/dashboard/quick-actions';
 
 export default function AdminDashboardPage() {
   const { data: session, status } = useSession();
@@ -37,7 +38,7 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold tracking-tight text-black">Admin</h2>
         <div className="text-black">Logged in as: {session?.user?.email}</div>
@@ -49,6 +50,7 @@ export default function AdminDashboardPage() {
         </button>
       </div>
       <StatsOverview />
+      <QuickActions /> {/* Add QuickActions here */}
       <div className="grid gap-6 md:grid-cols-2">
         <Overview />
         <ActivityFeed />

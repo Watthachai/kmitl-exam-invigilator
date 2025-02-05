@@ -44,52 +44,11 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const data = await request.json();
-    
-    // Validate required fields
-    if (!data.name || !data.type) {
-      return NextResponse.json(
-        { error: 'Name and type are required' }, 
-        { status: 400 }
-      );
-    }
-
-    // Get department ID
-    let departmentId = data.departmentId;
-    if (data.type === 'อาจารย์' && data.professorId) {
-      const professor = await prisma.professor.findUnique({
-        where: { id: data.professorId },
-        select: { departmentId: true }
-      });
-      if (!professor) {
-        return NextResponse.json(
-          { error: 'Professor not found' }, 
-          { status: 404 }
-        );
-      }
-      departmentId = professor.departmentId;
-    }
-
-    // Create invigilator
-    const invigilator = await prisma.invigilator.create({
-      data: {
-        name: data.name,
-        type: data.type,
-        departmentId: departmentId,
-        professorId: data.professorId || null,
-        quota: data.quota || 4,
-        assignedQuota: 0
-      },
-      include: {
-        department: true,
-        professor: {
-          include: {
-            department: true
-          }
-        },
-        schedules: true
-      }
+    const invigilator = await prisma.$transaction(async (tx) => {
+      const newInvigilator = await tx.invigilator.create({ data });
+      await logActivity('CREATE', `Added invigilator ${data.name}`, tx);
+      return newInvigilator;
     });
-
     return NextResponse.json(invigilator);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {

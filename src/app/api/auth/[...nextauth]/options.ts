@@ -2,7 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { PrismaClient } from "@prisma/client";
-
+import { logActivity } from "@/app/lib/activity-logger";
 
 const prisma = new PrismaClient();
 
@@ -24,16 +24,18 @@ export const options: NextAuthOptions = {
      * signIn: Control if a user is allowed to sign in.
      * Here, we only allow Google sign-ins with a "@kmitl.ac.th" domain.
      */
-    async signIn({ account, profile }) {
+    async signIn({ account, profile, user }) {
       if (account?.provider === "google") {
         // Check if the user’s email ends with "@kmitl.ac.th"
         if (profile?.email?.endsWith("@kmitl.ac.th")) {
+          await logActivity('LOGIN', `User ${user.email} signed in`);
           return true; // Allow sign-in
         }
         // Otherwise, block sign-in
         return false;
       }
       // For other providers, allow sign-in by default
+      await logActivity('LOGIN', `User ${user.email} signed in`);
       return true;
     },
 

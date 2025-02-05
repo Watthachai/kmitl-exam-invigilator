@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useTransition, useCallback, useEffect } from 'react';
+import React, { useState, useTransition, useEffect, useRef, useCallback } from 'react';
 import { parseExcelFile } from '@/app/lib/excel-wrapper';
 import { utils as XLSXUtils, write as XLSXWrite } from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import ImportProgress from '@/app/components/ui/import-progress';
-import { FileUpload } from './components/file-upload';
+import { FileUpload } from '@/app/dashboard/admin/components/file-upload'
 import { storage } from '@/app/lib/storage';
 
 interface TableData {
@@ -62,7 +62,7 @@ const STORAGE_KEYS = {
 } as const;
 
 // Replace storage functions
-const saveToStorage = (key: string, data: any) => storage.set(key, data);
+const saveToStorage = (key: string, data: TableData[] | boolean) => storage.set(key, data);
 const loadFromStorage = (key: string) => storage.get(key);
 
 export default function TablePage() {
@@ -76,10 +76,40 @@ export default function TablePage() {
   const [isPending] = useTransition(); // For handling loading states during server actions
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [importProgress, setImportProgress] = useState(0);
-  const [importStage, setImportStage] = useState('');
   const [importLogs, setImportLogs] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [lastUploadedFile, setLastUploadedFile] = useState('');
+
+  const logQueue = useRef<string[]>([]);
+  const isProcessingQueue = useRef<boolean>(false);
+
+  // Add debounced log update
+  const updateLogsState = useCallback(() => {
+    if (logQueue.current.length > 0 && !isProcessingQueue.current) {
+      isProcessingQueue.current = true;
+      const nextLogs = [...logQueue.current];
+      logQueue.current = [];
+      
+      setImportLogs(currentLogs => {
+        isProcessingQueue.current = false;
+        return [...currentLogs, ...nextLogs];
+      });
+    }
+  }, []);
+
+  // Add log processing effect
+  useEffect(() => {
+    const timer = setInterval(updateLogsState, 100);
+    return () => clearInterval(timer);
+  }, [updateLogsState]);
+
+  // Add log helper
+  const addLog = useCallback((message: string) => {
+    logQueue.current.push(message);
+    if (!isProcessingQueue.current) {
+      updateLogsState();
+    }
+  }, [updateLogsState]);
 
   // Update the useEffect for initial data load
   useEffect(() => {
@@ -230,36 +260,55 @@ export default function TablePage() {
     setShowDatePrompt(true);
   };
 
-// Update existing confirmSaveToDatabase function
+// Update confirmSaveToDatabase function
 const confirmSaveToDatabase = async () => {
-  const stages = {
-    INIT: { progress: 0, message: '🚀 Starting import...' },
-    PROCESSING: { progress: 20, message: '📝 Processing records...' },
-    DATA_IMPORT: { progress: 40, message: '💾 Importing data...' },
-    SAVING: { progress: 70, message: '📥 Saving to database...' },
-    COMPLETE: { progress: 100, message: '✅ Import complete!' }
-  };
-
   try {
     setIsImporting(true);
-    setImportProgress(stages.INIT.progress);
-    setImportLogs([stages.INIT.message]);
-    
-    // Process records in larger chunks
+    setImportProgress(0);
+    addLog('🚀 Starting import process...');
+
     const dataToSave = isEditing ? editedData : tableData;
-    const chunkSize = 10; // Increased chunk size
+    const totalItems = dataToSave.length;
+    const chunkSize = 10;
+    const totalChunks = Math.ceil(totalItems / chunkSize);
     
     for (let i = 0; i < dataToSave.length; i += chunkSize) {
       const chunk = dataToSave.slice(i, i + chunkSize);
-      const currentProgress = Math.min(70, Math.floor((i / dataToSave.length) * 50) + 20);
+      const currentChunk = Math.floor(i / chunkSize) + 1;
       
-      setImportStage('Processing & Saving');
-      setImportProgress(currentProgress);
-      setImportLogs(prev => [...prev, 
-        `📊 Processing batch ${Math.floor(i/chunkSize) + 1}/${Math.ceil(dataToSave.length/chunkSize)}`
-      ]);
+      // Update progress with detailed steps
+      setImportProgress((currentChunk / totalChunks) * 100);
+      
+      // Log start of chunk processing
+      addLog(`\n📦 Processing Batch ${currentChunk}/${totalChunks}:`);
+      addLog(`⏳ Progress: ${Math.floor((currentChunk / totalChunks) * 100)}%`);
+      addLog('├── 🔄 Initializing database transaction...');
 
-      // API call
+      // Log department operations
+      addLog('├── 🏢 Processing Departments (10%)');
+      addLog(`│   ├── Finding department codes...`);
+      addLog(`│   └── Upserting department records...`);
+
+      // Log professor operations
+      addLog('├── 👥 Processing Professors (30%)');
+      addLog(`│   ├── Creating professor records...`);
+      addLog(`│   └── Updating invigilator data...`);
+
+      // Log subject operations
+      addLog('├── 📚 Processing Subjects (50%)');
+      addLog(`│   ├── Upserting subject records...`);
+      addLog(`│   └── Linking departments...`);
+
+      // Log room operations
+      addLog('├── 🏫 Processing Rooms (70%)');
+      addLog(`│   ├── Creating room records...`);
+      addLog(`│   └── Updating room data...`);
+
+      // Log schedule creation
+      addLog('├── 📅 Creating Schedules (90%)');
+      addLog(`│   ├── Validating time slots...`);
+      addLog(`│   └── Inserting schedule records...`);
+
       const response = await fetch('/api/import-excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -271,16 +320,24 @@ const confirmSaveToDatabase = async () => {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to import batch ${Math.floor(i/chunkSize) + 1}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to import batch ${currentChunk}`);
       }
 
-      await new Promise(r => setTimeout(r, 300)); // Reduced delay
+      await response.json();
+      
+      // Log success for this chunk
+      addLog('└── ✅ Batch Complete:');
+      addLog(`    ├── Records processed: ${chunk.length}`);
+      addLog(`    └── Total progress: ${Math.floor((currentChunk / totalChunks) * 100)}%\n`);
     }
 
-    // Complete
-    setImportStage('Complete');
+    // Final success state
     setImportProgress(100);
-    setImportLogs(prev => [...prev, stages.COMPLETE.message]);
+    addLog('\n🎉 Import Summary:');
+    addLog(`├── Total records processed: ${totalItems}`);
+    addLog(`├── Number of batches: ${totalChunks}`);
+    addLog(`└── Final Status: Complete ✨`);
     
     toast.success('Data imported successfully');
     setShowDatePrompt(false);
@@ -289,7 +346,10 @@ const confirmSaveToDatabase = async () => {
     setIsImporting(false);
 
   } catch (error) {
-    setImportLogs(prev => [...prev, `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+    addLog('\n❌ Error Details:');
+    addLog(`├── Message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    addLog(`├── Location: Database transaction`);
+    addLog(`└── Status: Import halted`);
     toast.error(error instanceof Error ? error.message : 'An unknown error occurred');
     setIsImporting(false);
   }
@@ -343,17 +403,29 @@ const addMissingRoomEntries = () => {
         {/* Move FileUpload to center when no data */}
         {tableData.length === 0 ? (
           <div className="fixed inset-0 flex items-center justify-center">
-            <div className="w-[600px] p-12 rounded-xl bg-white/50 backdrop-blur-sm shadow-lg border-2 border-dashed border-gray-200">
+            <div data-testid="empty-state-upload" className="w-[600px] p-12 rounded-xl bg-white/50 backdrop-blur-sm shadow-lg border-2 border-dashed border-gray-200">
               <FileUpload 
-                onFileUpload={(file) => handleFileUpload({ target: { files: [file] } } as any)} 
-                defaultFileName={lastUploadedFile} // Use state instead of direct sessionStorage access
+                onFileUpload={(file) => {
+                  const mockEvent = {
+                    target: { files: [file] },
+                    preventDefault: () => {},
+                    stopPropagation: () => {}
+                  } as unknown as React.ChangeEvent<HTMLInputElement>;
+                  handleFileUpload(mockEvent);
+                }}
+                defaultFileName={lastUploadedFile}
               />
             </div>
           </div>
         ) : (
           <div className="flex items-center gap-4">
             <FileUpload 
-              onFileUpload={(file) => handleFileUpload({ target: { files: [file] } } as any)} 
+              onFileUpload={(file) => {
+                const mockEvent = {
+                  target: { files: [file] }
+                } as unknown as React.ChangeEvent<HTMLInputElement>;
+                handleFileUpload(mockEvent);
+              }}
               defaultFileName={lastUploadedFile} // Use state here as well
             />
             {tableData.length > 0 && (
@@ -552,7 +624,7 @@ const addMissingRoomEntries = () => {
       {isImporting && (
         <ImportProgress
           progress={importProgress}
-          currentStage={importStage}
+          currentStage={`Importing ${Math.floor(importProgress)}%`}
           logs={importLogs}
         />
       )}

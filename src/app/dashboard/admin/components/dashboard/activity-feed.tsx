@@ -1,54 +1,75 @@
 // app/dashboard/components/dashboard/activity-feed.tsx
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { useActivities } from "@/app/hooks/useActivities";
+import { getActivityIcon } from "@/app/utils/activity-icons";
+import { formatDistanceToNow, parseISO } from 'date-fns';
 
-const activities = [
-  {
-    user: 'Howell Hand',
-    amount: 375.53,
-    date: '3 days ago',
-    type: 'Deposit',
-    account: 'Home Loan Account',
-    progress: 70,
-  },
-  {
-    user: 'Watt Howe',
-    amount: 470.26,
-    date: '3 days ago',
-    type: 'Payment',
-    account: 'Savings Account',
-    progress: 68,
-  },
-  // Add more activities as needed
-];
 
-export const ActivityFeed = () => {
+export function ActivityFeed() {
+  const { activities, isLoading, error } = useActivities();
+
+  // Format date safely
+  const formatDate = (dateString: string) => {
+    try {
+      return formatDistanceToNow(parseISO(dateString), { addSuffix: true });
+    } catch {
+      console.error('Invalid date:', dateString);
+      return 'Invalid date';
+    }
+  };
+
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
+          <CardTitle>Recent Activities</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {activities.map((activity, i) => (
-            <div key={i} className="flex items-center gap-4">
-              <Avatar>
-                <AvatarFallback>{activity.user[0]}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">{activity.user}</p>
-                  <span className="text-sm text-gray-500">{activity.date}</span>
-                </div>
-                <p className="text-sm text-gray-500">
-                  ${activity.amount} - {activity.type} - {activity.account}
-                </p>
-              </div>
-              <div className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs">
-                {activity.progress}%
-              </div>
-            </div>
-          ))}
+        <CardContent>
+          <div className="flex items-center justify-center h-40">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+          </div>
         </CardContent>
       </Card>
     );
-  };
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activities</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-red-500 text-center">{error}</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Recent Activities</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {activities?.map((activity) => (
+            <div key={activity.id} className="flex items-center gap-4">
+              <div className="rounded-full p-2 bg-gray-50">
+                {getActivityIcon(activity.type)}
+              </div>
+              <div className="flex-1 space-y-1">
+                <p className="text-sm font-medium">{activity.description}</p>
+                <div className="flex items-center text-xs text-gray-500 gap-2">
+                  <span>{formatDate(activity.createdAt)}</span>
+                  <span>•</span>
+                  <span>by {activity.user?.name || 'System'}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

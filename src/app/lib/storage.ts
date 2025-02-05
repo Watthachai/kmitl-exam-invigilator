@@ -19,10 +19,10 @@ export const storage = {
       }
     },
     
-    set: (key: string, data: any) => {
+    set: (key: string, data: string | number | boolean | object) => {
       if (typeof window === 'undefined') return;
       try {
-        const value = key === 'lastUploadedFile' ? data : JSON.stringify(data);
+        const value = key === 'lastUploadedFile' ? String(data) : JSON.stringify(data);
         sessionStorage.setItem(key, value);
       } catch (error) {
         console.error('Error setting item in storage:', error);

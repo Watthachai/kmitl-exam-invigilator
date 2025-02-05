@@ -53,6 +53,7 @@ model User {
   role          String    @default("user")
   professor     Professor? // Link to Professor if user is a professor
   invigilator   Invigilator? // Link to Invigilator if user is an invigilator
+  activities    Activity[]
 }
 
 model VerificationToken {
@@ -151,8 +152,8 @@ model Schedule {
   roomId              String
   subjectGroup        SubjectGroup @relation(fields: [subjectGroupId], references: [id])
   subjectGroupId      String
-  invigilator         Invigilator @relation(fields: [invigilatorId], references: [id])
-  invigilatorId       String
+  invigilator         Invigilator? @relation(fields: [invigilatorId], references: [id])
+  invigilatorId       String?
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
   
@@ -193,4 +194,15 @@ model Room {
   updatedAt  DateTime   @default(now())
 
   @@unique([building, roomNumber]) // Add unique constraint for building + roomNumber combination
+}
+
+model Activity {
+  id          String   @id @default(cuid()) @map("ActivityID")
+  type        String
+  description String
+  createdAt   DateTime @default(now())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
 }
