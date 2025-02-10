@@ -24,10 +24,7 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      const result = await signIn('google');
-      if (result?.error) {
-        setError('Google authentication failed');
-      }
+      await signIn('google');
     } catch {
       setError('Login failed');
     } finally {

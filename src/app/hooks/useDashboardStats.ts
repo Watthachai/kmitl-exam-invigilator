@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export interface DashboardStats {
+interface DashboardStats {
   departmentCount: number;
   invigilatorCount: number;
   upcomingExams: number;
@@ -20,15 +20,13 @@ export function useDashboardStats() {
         const data = await response.json();
         setStats(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
+        setError(err instanceof Error ? err.message : 'Failed to load stats');
       } finally {
         setIsLoading(false);
       }
     }
 
     fetchStats();
-    const interval = setInterval(fetchStats, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
   }, []);
 
   return { stats, isLoading, error };

@@ -8,7 +8,7 @@ import PopupModal from '@/app/components/ui/popup-modal';
 interface Department {
   id: string;
   name: string;
-  code: string;
+  codes: string[];
   createdAt: string;
   updatedAt: string;
   _count?: {
@@ -18,18 +18,28 @@ interface Department {
   };
 }
 
+interface DepartmentFormData {
+  name: string;
+  codes: string[];
+}
+
 export default function DepartmentsPage() {
+  // Initialize with empty array to prevent undefined
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Add State
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newDepartmentData, setNewDepartmentData] = useState({
+  const [newDepartmentData, setNewDepartmentData] = useState<DepartmentFormData>({
     name: '',
-    code: ''
+    codes: ['']
   });
+  
   // Edit State
   const [showEditModal, setShowEditModal] = useState(false);
   const [editDepartment, setEditDepartment] = useState<Department | null>(null);
+  
   // Delete State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
@@ -37,8 +47,8 @@ export default function DepartmentsPage() {
   // Add Department Handler Function
   const handleAddDepartment = async () => {
     try {
-      if (!newDepartmentData.name.trim() || !newDepartmentData.code.trim()) {
-        toast.error('Department name and code are required');
+      if (!newDepartmentData.name.trim() || !newDepartmentData.codes[0]?.trim()) {
+        toast.error('Department name and primary code are required');
         return;
       }
       
@@ -53,7 +63,7 @@ export default function DepartmentsPage() {
       if (!response.ok) throw new Error('Failed to add department');
       const data = await response.json();
       setDepartments([...departments, data]);
-      setNewDepartmentData({ name: '', code: '' });
+      setNewDepartmentData({ name: '', codes: [''] });
       setShowAddModal(false);
       toast.success('Department added successfully');
     } catch (error) {
@@ -65,8 +75,8 @@ export default function DepartmentsPage() {
   //Edit Department Handler Function
   const handleEditDepartment = async () => {
     try {
-      if (!editDepartment?.name.trim() || !editDepartment?.code.trim()) {
-        toast.error('Department name and code are required');
+      if (!editDepartment?.name.trim() || !editDepartment?.codes[0]?.trim()) {
+        toast.error('Department name and primary code are required');
         return;
       }
 
@@ -77,7 +87,7 @@ export default function DepartmentsPage() {
         },
         body: JSON.stringify({
           name: editDepartment.name,
-          code: editDepartment.code
+          codes: editDepartment.codes
         }),
       });
 
@@ -121,15 +131,44 @@ export default function DepartmentsPage() {
   useEffect(() => {
     const fetchDepartments = async () => {
       try {
+        setIsLoading(true);
         const response = await fetch('/api/departments');
+        if (!response.ok) throw new Error('Failed to fetch departments');
         const data = await response.json();
-        setDepartments(data);
+        // Ensure we always set an array
+        setDepartments(Array.isArray(data) ? data : []);
       } catch (error) {
-        console.error('Error fetching departments:', error);
+        console.error('Error:', error);
+        setDepartments([]); // Reset to empty array on error
+        setError('Failed to fetch departments. Please try again later.');
+      } finally {
+        setIsLoading(false);
       }
     };
     fetchDepartments();
   }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-red-500">{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -160,10 +199,26 @@ export default function DepartmentsPage() {
                 </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-                {departments.map((department) => (
+              {Array.isArray(departments) && departments.length > 0 ? (
+                departments.map((department) => (
                 <tr key={department.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">{department.id}</td>
-                    <td className="px-6 py-4">{department.code}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex gap-1 flex-wrap">
+                        {department.codes.map((code, index) => (
+                          <span 
+                            key={index}
+                            className={`px-2 py-0.5 rounded-full text-xs ${
+                              index === 0
+                                ? 'bg-blue-100 text-blue-800' 
+                                : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            {code}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
                     <td className="px-6 py-4">{department.name}</td>
                     <td className="px-6 py-4">{department._count?.subjects || 0}</td>
                     <td className="px-6 py-4">{department._count?.professors || 0}</td>
@@ -195,7 +250,14 @@ export default function DepartmentsPage() {
                         </div>
                     </td>
                 </tr>
-                ))}
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={9} className="px-6 py-4 text-center text-gray-500">
+                    No departments found
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -203,80 +265,159 @@ export default function DepartmentsPage() {
 
         {/*POPUP ZONE*/}
         {showAddModal && (
-        <PopupModal
-            title="Add New Department"
-            onClose={() => setShowAddModal(false)}
-            onConfirm={handleAddDepartment}
-            confirmText="Add Department"
-        >
-            <div className="space-y-4">
-              <div>
-                <label className="block text-gray-700">Department Name</label>
-                <input
-                  type="text"
-                  value={newDepartmentData.name}
-                  onChange={(e) => setNewDepartmentData({
+  <PopupModal
+    title="Add New Department"
+    onClose={() => setShowAddModal(false)}
+    onConfirm={handleAddDepartment}
+    confirmText="Add Department"
+  >
+    <div className="space-y-4">
+      <div>
+        <label className="block text-gray-700">Department Name</label>
+        <input
+          type="text"
+          value={newDepartmentData.name}
+          onChange={(e) => setNewDepartmentData({
+            ...newDepartmentData,
+            name: e.target.value
+          })}
+          className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Enter department name"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700">Primary Code</label>
+        <input
+          type="text"
+          value={newDepartmentData.codes[0]}
+          onChange={(e) => setNewDepartmentData({
+            ...newDepartmentData,
+            codes: [e.target.value, ...newDepartmentData.codes.slice(1)]
+          })}
+          className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Enter primary department code"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700">Additional Codes</label>
+        <div className="flex gap-2 flex-wrap">
+          {newDepartmentData.codes.slice(1).map((code, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={code}
+                onChange={(e) => {
+                  const newCodes = [...newDepartmentData.codes];
+                  newCodes[index + 1] = e.target.value;
+                  setNewDepartmentData({
                     ...newDepartmentData,
-                    name: e.target.value
-                  })}
-                  className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter department name"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700">Department Code</label>
-                <input
-                  type="text"
-                  value={newDepartmentData.code}
-                  onChange={(e) => setNewDepartmentData({
+                    codes: newCodes
+                  });
+                }}
+                className="border border-gray-300 p-2 rounded-md w-24"
+                placeholder="Code"
+              />
+              <button
+                onClick={() => {
+                  const newCodes = newDepartmentData.codes.filter((_, i) => i !== index + 1);
+                  setNewDepartmentData({
                     ...newDepartmentData,
-                    code: e.target.value
-                  })}
-                  className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter department code"
-                />
-              </div>
+                    codes: newCodes
+                  });
+                }}
+                className="text-red-500 hover:text-red-700"
+              >
+                ×
+              </button>
             </div>
-        </PopupModal>
-        )}
+          ))}
+          <button
+            type="button"
+            onClick={() => setNewDepartmentData({
+              ...newDepartmentData,
+              codes: [...newDepartmentData.codes, '']
+            })}
+            className="text-blue-500 hover:text-blue-700"
+          >
+            + Add Code
+          </button>
+        </div>
+      </div>
+    </div>
+  </PopupModal>
+)}
 
-        {showEditModal && (
-        <PopupModal
-            title="Edit Department"
-            onClose={() => setShowEditModal(false)}
-            onConfirm={handleEditDepartment}
-            confirmText="Update Department"
-        >
-            <div className="space-y-4">
-              <div>
-                <label className="block text-gray-700">Department Name</label>
-                <input
-                  type="text"
-                  value={editDepartment?.name}
-                  onChange={(e) => editDepartment && setEditDepartment({
+        {showEditModal && editDepartment && (
+  <PopupModal
+    title="Edit Department"
+    onClose={() => setShowEditModal(false)}
+    onConfirm={handleEditDepartment}
+    confirmText="Update Department"
+  >
+    <div className="space-y-4">
+      <div>
+        <label className="block text-gray-700">Primary Code</label>
+        <input
+          type="text"
+          value={editDepartment.codes[0]}
+          onChange={(e) => setEditDepartment({
+            ...editDepartment,
+            codes: [e.target.value, ...editDepartment.codes.slice(1)]
+          })}
+          className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Enter primary code"
+        />
+      </div>
+      <div>
+        <label className="block text-gray-700">Additional Codes</label>
+        <div className="flex gap-2 flex-wrap">
+          {editDepartment?.codes.slice(1).map((code, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={code}
+                onChange={(e) => {
+                  if (!editDepartment) return;
+                  const newCodes = [...editDepartment.codes];
+                  newCodes[index + 1] = e.target.value;
+                  setEditDepartment({
                     ...editDepartment,
-                    name: e.target.value
-                  })}
-                  className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter department name"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700">Department Code</label>
-                <input
-                  type="text"
-                  value={editDepartment?.code}
-                  onChange={(e) => editDepartment && setEditDepartment({
+                    codes: newCodes
+                  });
+                }}
+                className="border border-gray-300 p-2 rounded-md w-24"
+                placeholder="Code"
+              />
+              <button
+                onClick={() => {
+                  if (!editDepartment) return;
+                  const newCodes = editDepartment.codes.filter((_, i) => i !== index + 1);
+                  setEditDepartment({
                     ...editDepartment,
-                    code: e.target.value
-                  })}
-                  className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter department code"
-                />
-              </div>
+                    codes: newCodes
+                  });
+                }}
+                className="text-red-500 hover:text-red-700"
+              >
+                ×
+              </button>
             </div>
-        </PopupModal>
-        )}
+          ))}
+          <button
+            type="button"
+            onClick={() => editDepartment && setEditDepartment({
+              ...editDepartment,
+              codes: [...editDepartment.codes, '']
+            })}
+            className="text-blue-500 hover:text-blue-700"
+          >
+            + Add Code
+          </button>
+        </div>
+      </div>
+    </div>
+  </PopupModal>
+)}
 
         {showDeleteModal && selectedDepartment && (
           <PopupModal

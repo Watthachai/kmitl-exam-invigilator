@@ -1,18 +1,17 @@
 import prisma from './prisma';
-import { getServerSession } from 'next-auth';
+import { Prisma } from '@prisma/client';
 
 export async function logActivity(
   type: 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT' | 'LOGIN',
   description: string,
-  prismaClient = prisma
+  prismaClient: Prisma.TransactionClient = prisma,
+  userId?: string | null
 ) {
-  const session = await getServerSession();
-  
   return prismaClient.activity.create({
     data: {
       type,
       description,
-      userId: session?.user?.id
+      ...(userId && { userId })
     }
   });
 }

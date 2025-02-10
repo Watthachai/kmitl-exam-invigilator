@@ -3,7 +3,6 @@ import prisma from '@/app/lib/prisma';
 import { ExamData } from '@/app/types';
 import { Prisma } from '@prisma/client';
 import { departments } from '@/app/lib/data/departments';
-import { logActivity } from '@/app/lib/activity-logger';
 
 interface ImportRequest {
   data: ExamData[];
@@ -18,13 +17,26 @@ export async function GET() {
 }
 
 // Helper function to get department name
-function getDepartmentNameFromCode(subjectCode: string): string {
-  if (subjectCode.startsWith('01')) {
-    const deptCode = subjectCode.substring(2, 4);
-    const exactMatch = departments.find(dept => dept.code === deptCode);
-    return exactMatch ? exactMatch.name : 'ไม่มีภาควิชา';
-  }
-  return 'ไม่มีภาควิชา';
+// Update getDepartmentNameFromCode function to handle multiple codes
+async function getDepartmentNameFromCode(
+  code: string,
+  prismaClient: Prisma.TransactionClient
+): Promise<string> {
+  const department = await prismaClient.department.findFirst({
+    where: {
+      OR: [
+        { code },
+        {
+          metadata: {
+            path: ['codes'],
+            array_contains: [code]
+          }
+        }
+      ]
+    }
+  });
+
+  return department?.name || 'ไม่มีภาควิชา';
 }
 
 // Update findOrCreateProfessors with better department handling
@@ -86,7 +98,7 @@ async function upsertSubject(
   name: string, 
   prismaClient: Prisma.TransactionClient
 ) {
-  const deptName = getDepartmentNameFromCode(code);
+  const deptName = await getDepartmentNameFromCode(code, prismaClient);
   const department = await prismaClient.department.findFirstOrThrow({
     where: { name: deptName }
   });
@@ -121,6 +133,9 @@ async function processExamData(
   const processedSchedules = new Set();
 
   for (const row of examData) {
+    if (!validateExamData(row)) {
+      throw new Error('Invalid exam data format');
+    }
     const [subjectCode, ...subjectNameParts] = row.วิชา.trim().split(' ');
     const trimmedSubjectCode = subjectCode.trim();
     
@@ -249,34 +264,28 @@ function validateTransactionError(error: unknown): Error {
 }
 
 // Update seedDepartments to use prismaClient
-async function seedDepartments(
-  prismaClient: Prisma.TransactionClient
-) {
+// Update seedDepartments to handle multiple codes
+async function seedDepartments(prismaClient: Prisma.TransactionClient) {
   try {
     console.log('Starting department seeding...');
     
-    await prismaClient.department.upsert({
-      where: { code: '00' },
-      create: {
-        name: 'ส่วนกลาง',
-        code: '00'
-      },
-      update: {}
-    });
-
     for (const dept of departments) {
       await prismaClient.department.upsert({
         where: { code: dept.code },
         create: {
           name: dept.name,
-          code: dept.code
+          code: dept.code,
+          // Store additional codes as JSON in a metadata field
+          metadata: { codes: dept.codes }
         },
-        update: { name: dept.name }
+        update: { 
+          name: dept.name,
+          metadata: { codes: dept.codes }
+        }
       });
     }
 
-    const deptCount = await prismaClient.department.count();
-    console.log(`Department seeding completed. Total: ${deptCount}`);
+    console.log(`Department seeding completed. Total: ${departments.length}`);
     return true;
 
   } catch (error) {
@@ -286,52 +295,65 @@ async function seedDepartments(
 }
 
 // Fix POST handler
+// Update POST handler with better activity logging
 export async function POST(request: Request) {
   try {
     const body = await request.json() as ImportRequest;
     
-    if (!body?.data?.length || !body.scheduleOption || !body.examDate) {
-      return NextResponse.json({ 
-        success: false,
-        error: 'Invalid request data'
-      }, { status: 400 });
-    }
-
-    // Add validation using validateExamData
-    if (!body.data.every(validateExamData)) {
-      return NextResponse.json({
-        success: false,
-        error: 'Invalid exam data format'
-      }, { status: 400 });
-    }
-
+    // Start new transaction
     const result = await prisma.$transaction(async (tx) => {
-      console.log('Starting transaction...');
+      // Log start
+      await tx.activity.create({
+        data: {
+          type: 'IMPORT',
+          description: `Starting import of ${body.data.length} exam schedules`
+        }
+      });
+
+      // Seed departments first
       await seedDepartments(tx);
+
+      // Process exam data within same transaction
       await processExamData(
         body.data, 
         body.scheduleOption, 
         new Date(body.examDate),
         tx
       );
-      console.log('Transaction completed');
 
-      // Log the import activity
-      await logActivity('IMPORT', `Imported ${body.data.length} exam schedules for ${body.examDate}`, tx);
+      // Log success within transaction
+      await tx.activity.create({
+        data: {
+          type: 'IMPORT',
+          description: `Successfully imported ${body.data.length} exam schedules`
+        }
+      });
 
-      return { success: true };
+      return { success: true, count: body.data.length };
     }, {
-      maxWait: 30000,
-      timeout: 60000
+      maxWait: 10000, // 10s max wait
+      timeout: 30000, // 30s timeout
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable
     });
 
-    return NextResponse.json(result || { success: false });
+    return NextResponse.json(result);
 
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'An unexpected error occurred';
+    // Log error outside transaction since original one rolled back
+    await prisma.activity.create({
+      data: {
+        type: 'IMPORT',
+        description: `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }
+    });
+
+    console.error('Import failed:', error);
+    
     return NextResponse.json({
       success: false,
-      error: message
-    }, { status: 500 });
+      error: error instanceof Error ? error.message : 'Import failed'
+    }, { 
+      status: 500 
+    });
   }
 }
