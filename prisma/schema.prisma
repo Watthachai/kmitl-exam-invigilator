@@ -15,7 +15,7 @@ generator client {
 
 model Account {
   id                 String  @id @default(cuid()) @map("AccountID")
-  userId             String
+  userId             String  @map("user_id")
   type               String
   provider           String
   providerAccountId  String
@@ -32,14 +32,17 @@ model Account {
   user User @relation(fields:[userId], references:[id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@map("accounts")  // Table name in database is lowercase
 }
 
 model Session {
   id           String   @id @default(cuid()) @map("SessionID")
-  sessionToken String   @unique
-  userId       String
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
   expires      DateTime
   user         User     @relation(fields:[userId], references:[id], onDelete: Cascade)
+
+  @@map("sessions")  // Table name in database is lowercase
 }
 
 model User {
@@ -53,6 +56,9 @@ model User {
   role          String    @default("user")
   professor     Professor? // Link to Professor if user is a professor
   invigilator   Invigilator? // Link to Invigilator if user is an invigilator
+  activities    Activity[]
+  
+  @@map("users")  // Table name in database is lowercase
 }
 
 model VerificationToken {
@@ -95,20 +101,20 @@ model SubjectGroup {
 }
 
 model Invigilator {
-  id            String     @id @default(cuid()) @map("InvigilatorID")
-  name          String
-  type          String     @default("บุคลากร")
-  departmentId  String?    // Make optional first
-  department    Department? @relation(fields: [departmentId], references: [id]) // Optional relation
-  professorId   String?
-  professor     Professor? @relation(fields: [professorId], references: [id])
-  schedules     Schedule[]
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  userId        String?    @unique
-  user          User?      @relation(fields: [userId], references: [id])
-  quota         Int        @default(4)
-  assignedQuota Int        @default(0)
+  id             String     @id @default(cuid()) @map("InvigilatorID")
+  name           String
+  type           String     @default("บุคลากร")
+  departmentId   String     // Required now since we need department assignment
+  department     Department @relation(fields: [departmentId], references: [id])
+  professorId    String?    @unique // Optional since not all invigilators are professors
+  professor      Professor? @relation(fields: [professorId], references: [id])
+  schedules      Schedule[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  userId         String?    @unique
+  user           User?      @relation(fields: [userId], references: [id])
+  quota          Int        @default(4)     // Maximum assignments allowed
+  assignedQuota  Int        @default(0)     // Current number of assignments
 
   @@index([departmentId])
   @@index([professorId])
@@ -151,8 +157,8 @@ model Schedule {
   roomId              String
   subjectGroup        SubjectGroup @relation(fields: [subjectGroupId], references: [id])
   subjectGroupId      String
-  invigilator         Invigilator @relation(fields: [invigilatorId], references: [id])
-  invigilatorId       String
+  invigilator         Invigilator? @relation(fields: [invigilatorId], references: [id])
+  invigilatorId       String?
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
   
@@ -166,6 +172,8 @@ model Schedule {
 model Department {
   id          String       @id @default(cuid()) @map("DepartmentID")
   name        String       @unique
+  code        String       @unique
+  metadata    Json?
   subjects    Subject[]
   professors  Professor[]
   invigilators Invigilator[]
@@ -189,7 +197,18 @@ model Room {
   roomNumber String
   schedules  Schedule[] // Add relation to Schedule
   createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  updatedAt  DateTime   @default(now())
 
   @@unique([building, roomNumber]) // Add unique constraint for building + roomNumber combination
+}
+
+model Activity {
+  id          String   @id @default(cuid()) @map("ActivityID")
+  type        String
+  description String
+  createdAt   DateTime @default(now())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
 }

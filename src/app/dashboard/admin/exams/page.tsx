@@ -48,7 +48,7 @@ interface Schedule {
       };
     };
   };
-  invigilator: {
+  invigilator?: {  // Make invigilator optional
     id: string;
     name: string;
     type?: string;
@@ -242,7 +242,7 @@ export default function ExamsPage() {
           startTime: editSchedule.startTime,
           endTime: editSchedule.endTime,
           roomId: editSchedule.room.id,
-          invigilatorId: editSchedule.invigilator.id
+          invigilatorId: editSchedule.invigilator?.id || ''
         }),
       });
 
@@ -492,6 +492,7 @@ export default function ExamsPage() {
                 <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">Actions</th>
               </tr>
             </thead>
+            {/* Update table body rendering with null checks */}
             <tbody className="divide-y divide-gray-100">
               {filteredSchedules.map((schedule) => (
                 <tr key={schedule.id} className="hover:bg-gray-50">
@@ -522,8 +523,13 @@ export default function ExamsPage() {
                   <td className="px-6 py-4">{schedule.room.roomNumber}</td>
                   <td className="px-6 py-4">{schedule.room.capacity || '-'}</td>
                   <td className="px-6 py-4">{schedule.subjectGroup.subject.department.name || '-'}</td>
-                  <td className="px-6 py-4">{schedule.invigilator.type || '-'}</td>
-                  <td className="px-6 py-4">{schedule.invigilator.name}</td>
+                  {/* Update invigilator columns with null checks */}
+                  <td className="px-6 py-4">
+                    {schedule.invigilator?.type || '-'}
+                  </td>
+                  <td className="px-6 py-4">
+                    {schedule.invigilator?.name || '-'}
+                  </td>
                   <td className="px-6 py-4">{schedule.notes || '-'}</td>
                   <td className="px-6 py-4">
                     <div className="flex justify-end gap-2">
@@ -685,10 +691,10 @@ export default function ExamsPage() {
                 <div>
                   <label className="block text-gray-700">Invigilator</label>
                   <select
-                    value={editSchedule.invigilator.id}
+                    value={editSchedule.invigilator?.id || ''}
                     onChange={(e) => setEditSchedule({
                       ...editSchedule,
-                      invigilator: { ...editSchedule.invigilator, id: e.target.value }
+                      invigilator: { id: e.target.value, name: '', type: '' }
                     })}
                     className="w-full border border-gray-300 p-2 rounded-md"
                     required
