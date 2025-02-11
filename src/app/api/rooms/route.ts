@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from '@/app/lib/prisma';
+import { logActivity } from '@/app/lib/activity-logger';
 
 export async function GET() {
   try {
@@ -39,35 +40,18 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  try {
-    const { building, roomNumber } = await request.json();
-    
-    // Check for existing room
-    const existingRoom = await prisma.room.findFirst({
-      where: {
-        AND: [
-          { building },
-          { roomNumber }
-        ]
+  const data = await request.json();
+  
+  return await prisma.$transaction(async (tx) => {
+    const room = await tx.room.create({
+      data: {
+        building: data.building,
+        roomNumber: data.roomNumber
       }
     });
 
-    if (existingRoom) {
-      return NextResponse.json(
-        { error: 'Room already exists' }, 
-        { status: 400 }
-      );
-    }
-
-    const room = await prisma.room.create({
-      data: {
-        building,
-        roomNumber,
-      },
-    });
+    await logActivity('CREATE', `Created room ${data.building}-${data.roomNumber}`, tx);
+    
     return NextResponse.json(room);
-  } catch (error) {
-    console.error('Error creating room:', error);
-    return NextResponse.json({ error: 'Failed to create room' }, { status: 500 });
-  }
+  });
 }

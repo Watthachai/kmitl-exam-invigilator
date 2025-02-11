@@ -1,10 +1,18 @@
-// app/dashboard/layout.tsx
 "use client";
 
 import { SessionProvider } from "next-auth/react";
+import { Toaster } from 'react-hot-toast';
 import { SideNav } from '@/app/components/navigation/side-nav';
 import { TopNav } from '@/app/components/navigation/top-nav';
+import { useRoleChange } from '@/app/hooks/useRoleChange';
+import { Suspense } from 'react';
+import Loading from '@/app/loading';
 import { useState } from 'react';
+
+function RoleChangeDetector() {
+  useRoleChange();
+  return null;
+}
 
 export default function DashboardLayout({
   children,
@@ -15,6 +23,8 @@ export default function DashboardLayout({
 
   return (
     <SessionProvider>
+      <RoleChangeDetector />
+      <Toaster />
       <div className="min-h-screen bg-gray-100">
         {/* Left Sidebar */}
         <SideNav 
@@ -35,10 +45,9 @@ export default function DashboardLayout({
             </div>
           </header>
 
-          {/* Page Content */}
-          <main className="flex-1 p-6">
+          <Suspense fallback={<Loading />}>
             {children}
-          </main>
+          </Suspense>
         </div>
 
         {/* Overlay */}

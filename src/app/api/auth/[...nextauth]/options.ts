@@ -2,7 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { PrismaClient } from "@prisma/client";
-
+import { logActivity } from "@/app/lib/activity-logger";
 
 const prisma = new PrismaClient();
 
@@ -24,16 +24,18 @@ export const options: NextAuthOptions = {
      * signIn: Control if a user is allowed to sign in.
      * Here, we only allow Google sign-ins with a "@kmitl.ac.th" domain.
      */
-    async signIn({ account, profile }) {
+    async signIn({ account, profile, user }) {
       if (account?.provider === "google") {
         // Check if the user’s email ends with "@kmitl.ac.th"
         if (profile?.email?.endsWith("@kmitl.ac.th")) {
+          await logActivity('LOGIN', `User ${user.email} signed in`);
           return true; // Allow sign-in
         }
         // Otherwise, block sign-in
         return false;
       }
       // For other providers, allow sign-in by default
+      await logActivity('LOGIN', `User ${user.email} signed in`);
       return true;
     },
 
@@ -64,19 +66,35 @@ export const options: NextAuthOptions = {
      * Perfect for automatically creating an Invigilator record linked to the user.
      */
     async createUser({ user }) {
-      // Only create an Invigilator if the user has a kmitl email (or any condition you choose).
-      if (user.email && user.email.endsWith("@kmitl.ac.th")) {
-        const existingInvigilator = await prisma.invigilator.findUnique({
-          where: { userId: user.id },
+      if (user.email?.endsWith("@kmitl.ac.th")) {
+        // Get or create default department
+        let defaultDepartment = await prisma.department.findFirst({
+          where: { code: "00" }
         });
 
-        if (!existingInvigilator) {
+        if (!defaultDepartment) {
+          defaultDepartment = await prisma.department.create({
+            data: {
+              name: "ส่วนกลาง",
+              code: "00"
+            }
+          });
+        }
+
+        const existingInvigilator = await prisma.invigilator.findUnique({
+          where: { userId: user.id }
+        });
+
+        if (!existingInvigilator && defaultDepartment) {
           await prisma.invigilator.create({
             data: {
               name: user.name ?? "Unknown",
+              type: "บุคลากร",
               userId: user.id,
-              // Fill in other necessary fields (positionType, etc.)
-            },
+              departmentId: defaultDepartment.id,
+              quota: 4,
+              assignedQuota: 0
+            }
           });
         }
       }

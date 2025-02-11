@@ -1,13 +1,4 @@
-// src/app/types/dashboard.ts
-export interface Activity {
-    user: string;
-    amount: number;
-    date: string;
-    type: 'Deposit' | 'Payment' | 'Withdrawal';
-    account: string;
-    progress: number;
-  }
-  
+
   export interface StatsData {
     clients: {
       total: number;
@@ -80,4 +71,14 @@ export interface ExamData {
   'อาคาร': string;
   'ห้อง': string;
   'หมายเหตุ'?: string;
+}
+
+export interface Activity {
+  id: string;
+  type: string;
+  description: string;
+  createdAt: string;
+  user?: {
+    name: string;
+  };
 }

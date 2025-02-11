@@ -1,5 +1,6 @@
 import prisma from '@/app/lib/prisma';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { logActivity } from '@/app/lib/activity-logger';
 
 // GET: Fetch all subjects
 export async function GET() {
@@ -18,23 +19,15 @@ export async function GET() {
 }
 
 // POST: Add a new subject
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { name, code, departmentId } = await req.json();
-    
-    if (!name || !code || !departmentId) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
-
-    const newSubject = await prisma.subject.create({
-      data: {
-        name,
-        code,
-        departmentId,
-      },
+    const data = await request.json();
+    const subject = await prisma.$transaction(async (tx) => {
+      const newSubject = await tx.subject.create({ data });
+      await logActivity('CREATE', `Created subject ${data.code} ${data.name}`, tx);
+      return newSubject;
     });
-
-    return NextResponse.json(newSubject, { status: 201 });
+    return NextResponse.json(subject);
   } catch (error) {
     console.error('Error creating subject:', error);
     return NextResponse.json({ error: 'Failed to create subject' }, { status: 500 });

@@ -8,6 +8,13 @@ import { signOut } from "next-auth/react";
 import { Overview } from '@/app/dashboard/admin/components/dashboard/overview';
 import { ActivityFeed } from '@/app/dashboard/admin/components/dashboard/activity-feed';
 import { StatsOverview } from '@/app/dashboard/admin/components/dashboard/stats-overview';
+import { QuickActions } from '@/app/dashboard/admin/components/dashboard/quick-actions';
+const handleSignOut = () => {
+  signOut({ 
+    callbackUrl: '/',
+    redirect: true 
+  });
+};
 
 export default function AdminDashboardPage() {
   const { data: session, status } = useSession();
@@ -15,44 +22,65 @@ export default function AdminDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    console.log("Session status:", status);
-    console.log("Session data:", session);
-    if (status === "loading") return; // Avoid redirecting while session status is loading
+    if (status === "loading") return;
 
     if (status === "unauthenticated") {
       router.push("/login");
     } else if (status === "authenticated" && session?.user?.role !== "admin") {
       router.push("/dashboard");
     } else {
-      setIsLoading(false); // Loading is complete when authenticated with admin role
+      setIsLoading(false);
     }
   }, [status, session, router]);
 
   if (status === "loading" || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p>Loading...</p>
+        <div className="space-y-4">
+          <div className="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div>
+          <p className="text-gray-600">กำลังโหลด...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight text-black">Admin</h2>
-        <div className="text-black">Logged in as: {session?.user?.email}</div>
-        <button
-          onClick={() => signOut()}
-          className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-        >
-          Sign Out
-        </button>
+    <div className="space-y-6 p-6">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-black">
+            ระบบจัดการการคุมสอบ
+          </h1>
+          <p className="text-gray-500 text-sm">
+            คณะวิศวกรรมศาสตร์ สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง
+          </p>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="text-black text-sm">
+            ผู้ใช้: {session?.user?.email}
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="px-4 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition"
+          >
+            ออกจากระบบ
+          </button>
+        </div>
       </div>
+
       <StatsOverview />
+      
+      <QuickActions />
+      
       <div className="grid gap-6 md:grid-cols-2">
         <Overview />
         <ActivityFeed />
       </div>
+
+      <footer className="text-center text-gray-500 text-sm mt-8">
+        © 2024 ระบบจัดการการคุมสอบ KMITL
+      </footer>
     </div>
   );
 }
