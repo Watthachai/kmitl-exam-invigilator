@@ -61,6 +61,12 @@ npm >= 9.0.0
 git clone https://github.com/your-username/kmitl-exam-invigilator.git
 cd kmitl-exam-invigilator
 ```
+=======
+# kmitl-exam-invigilator
+=======
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
 
 2. Install dependencies
 ```bash
@@ -115,4 +121,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   <br />
   <br />
 </div>
-
