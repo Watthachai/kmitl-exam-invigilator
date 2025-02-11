@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/app/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { logActivity } from '@/app/lib/activity-logger';
 
 export async function GET() {
   try {
@@ -45,10 +46,33 @@ export async function POST(request: Request) {
   try {
     const data = await request.json();
     const invigilator = await prisma.$transaction(async (tx) => {
-      const newInvigilator = await tx.invigilator.create({ data });
-      await logActivity('CREATE', `Added invigilator ${data.name}`, tx);
+      const newInvigilator = await tx.invigilator.create({ 
+        data,
+        include: {
+          department: true,
+          professor: true
+        }
+      });
+      
+      // Check if userId exists before passing it to logActivity
+      if (newInvigilator.userId) {
+        await logActivity(
+          'CREATE', 
+          `Added invigilator ${data.name} (${newInvigilator.department?.name || 'No department'})`,
+          prisma, // Pass the prisma instance
+          newInvigilator.userId
+        );
+      } else {
+        await logActivity(
+          'CREATE', 
+          `Added invigilator ${data.name} (${newInvigilator.department?.name || 'No department'})`,
+          prisma
+        );
+      }
+      
       return newInvigilator;
     });
+    
     return NextResponse.json(invigilator);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -59,6 +83,7 @@ export async function POST(request: Request) {
         );
       }
     }
+    console.error('Error creating invigilator:', error);
     return NextResponse.json(
       { error: 'Failed to create invigilator' }, 
       { status: 500 }

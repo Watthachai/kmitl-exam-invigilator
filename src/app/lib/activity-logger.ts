@@ -1,16 +1,17 @@
+import { PrismaClient, Prisma } from '@prisma/client';
 import prisma from './prisma';
-import { Prisma } from '@prisma/client';
 
 export async function logActivity(
-  type: 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT' | 'LOGIN',
+  type: string,
   description: string,
-  prismaClient: Prisma.TransactionClient = prisma,
-  userId?: string | null
+  prismaClient: PrismaClient | Prisma.TransactionClient = prisma,
+  userId?: string
 ) {
-  return prismaClient.activity.create({
+  return await prismaClient.activity.create({
     data: {
       type,
       description,
+      createdAt: new Date(),
       ...(userId && { userId })
     }
   });

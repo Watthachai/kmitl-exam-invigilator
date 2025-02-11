@@ -9,8 +9,6 @@ import { Overview } from '@/app/dashboard/admin/components/dashboard/overview';
 import { ActivityFeed } from '@/app/dashboard/admin/components/dashboard/activity-feed';
 import { StatsOverview } from '@/app/dashboard/admin/components/dashboard/stats-overview';
 import { QuickActions } from '@/app/dashboard/admin/components/dashboard/quick-actions';
-import { ActiveUsers } from '@/app/dashboard/admin/components/active-users';
-
 const handleSignOut = () => {
   signOut({ 
     callbackUrl: '/',
@@ -78,7 +76,6 @@ export default function AdminDashboardPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Overview />
         <ActivityFeed />
-        <ActiveUsers />
       </div>
 
       <footer className="text-center text-gray-500 text-sm mt-8">

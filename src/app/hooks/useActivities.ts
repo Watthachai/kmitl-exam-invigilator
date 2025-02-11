@@ -6,6 +6,7 @@ export interface Activity {
   description: string;
   user: { name: string; email: string; } | null;
   timestamp: string;
+  createdAt: string;
 }
 
 export function useActivities() {

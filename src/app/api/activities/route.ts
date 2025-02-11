@@ -7,11 +7,7 @@ interface ActivityPayload {
   userId?: string;
 }
 
-interface ActivityResponse {
-  data: Activity[]
-}
-
-export async function GET(): Promise<ActivityResponse> {
+export async function GET(): Promise<Response> {
   try {
     const activities = await prisma.activity.findMany({
       take: 10,
@@ -23,7 +19,6 @@ export async function GET(): Promise<ActivityResponse> {
       }
     });
     
-    // Remove null check since findMany returns empty array if no results
     return NextResponse.json({ 
       data: activities 
     });
@@ -39,7 +34,7 @@ export async function GET(): Promise<ActivityResponse> {
   }
 }
 
-export async function POST(request: Request): Promise<ActivityResponse> {
+export async function POST(request: Request): Promise<Response> {
   try {
     const payload = await request.json() as ActivityPayload;
     

@@ -1,6 +1,6 @@
 // app/dashboard/components/dashboard/overview.tsx
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const examData = [
   { date: 'Jan', morningExams: 2, afternoonExams: 3 },

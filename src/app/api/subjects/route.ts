@@ -1,5 +1,6 @@
 import prisma from '@/app/lib/prisma';
 import { NextResponse } from 'next/server';
+import { logActivity } from '@/app/lib/activity-logger';
 
 // GET: Fetch all subjects
 export async function GET() {

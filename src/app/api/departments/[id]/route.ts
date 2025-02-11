@@ -47,8 +47,7 @@ export async function PUT(
 
       await logActivity(
         'UPDATE',
-        `Updated department ${name} with codes: ${codes.join(', ')}`,
-        tx
+        `Updated department ${name} with codes: ${codes.join(', ')}`
       );
 
       return {
