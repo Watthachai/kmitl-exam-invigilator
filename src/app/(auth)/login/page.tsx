@@ -6,10 +6,12 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Button } from "@/app/components/ui/button";
 import { Icons } from "@/app/components/ui/icons";
+import { NetworkError } from "@/components/network-error"
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [previousSession, setPreviousSession] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
   const router = useRouter();
   const { status, data: session } = useSession();
 
@@ -34,16 +36,41 @@ export default function LoginPage() {
     }
   }, [status, router]);
 
+  useEffect(() => {
+    // Check online status initially
+    setIsOffline(!navigator.onLine);
+
+    // Add event listeners for online/offline status
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
       await signIn('google');
-    } catch {
-      console.error('เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
+    } catch (error) {
+      if (!navigator.onLine) {
+        setIsOffline(true);
+      }
+      console.error('Login error:', error);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Show network error overlay when offline
+  if (isOffline) {
+    return <NetworkError />;
+  }
 
   if (status === 'authenticated' && session?.user) {
     return (

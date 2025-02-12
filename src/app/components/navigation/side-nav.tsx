@@ -85,7 +85,6 @@ export const SideNav = ({ isMobileMenuOpen, setIsMobileMenuOpen}: SideNavProps) 
           <Menu className="h-6 w-6" />
         )}
       </button>
-
       {/* Sidebar Navigation */}
       <nav className={`
       fixed top-0 left-0 h-full w-64 bg-gray-900 

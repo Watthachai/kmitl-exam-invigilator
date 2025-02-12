@@ -1,13 +1,14 @@
 "use client";
 
+import { useState, useEffect } from 'react';
 import { SessionProvider } from "next-auth/react";
 import { Toaster } from 'react-hot-toast';
 import { SideNav } from '@/app/components/navigation/side-nav';
 import { TopNav } from '@/app/components/navigation/top-nav';
+import { NetworkError } from '@/components/network-error';
 import { useRoleChange } from '@/app/hooks/useRoleChange';
 import { Suspense } from 'react';
 import Loading from '@/app/loading';
-import { useState } from 'react';
 
 function RoleChangeDetector() {
   useRoleChange();
@@ -19,12 +20,35 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const [isOffline, setIsOffline] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    setIsOffline(!navigator.onLine);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Prevent hydration mismatch
+  if (!isMounted) {
+    return null;
+  }
 
   return (
     <SessionProvider>
       <RoleChangeDetector />
       <Toaster />
+      {isOffline && <NetworkError />}
       <div className="min-h-screen bg-gray-100">
         {/* Left Sidebar */}
         <SideNav 

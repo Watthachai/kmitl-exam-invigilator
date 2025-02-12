@@ -10,7 +10,9 @@ const buttonVariants = cva(
         default: "bg-[#002D62] text-white hover:bg-[#002D62]/90", // KMITL dark blue
         google: "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
         outline: "border border-[#002D62] text-[#002D62] hover:bg-[#002D62]/10",
+        ghost: "hover:bg-gray-100",
         secondary: "bg-[#F16321] text-white hover:bg-[#F16321]/90" // KMITL gold/yellow
+
       },
       size: {
         default: "h-10 py-2 px-4",

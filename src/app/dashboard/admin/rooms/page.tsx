@@ -99,19 +99,19 @@ const TabContent: React.FC<TabContentProps> = ({ schedules, activeTab, isVisible
                           </span>
                           <div>
                             <div className="font-medium text-gray-900">
-                              {schedule.subjectGroup.subject.code}
+                              {schedule.subjectGroup?.subject?.code || 'N/A'}
                             </div>
                             <div className="text-sm text-gray-600">
-                              {schedule.subjectGroup.subject.name}
+                              {schedule.subjectGroup?.subject?.name || 'N/A'}
                             </div>
                           </div>
                         </div>
                         <div className="text-right">
                           <div className="text-sm text-gray-600">
-                            กลุ่ม {schedule.subjectGroup.groupNumber}
+                            กลุ่ม {schedule.subjectGroup?.groupNumber || 'N/A'}
                           </div>
                           <div className="text-sm font-medium text-gray-900">
-                            {schedule.invigilator.name}
+                            {schedule.invigilator?.name || 'ไม่ระบุผู้คุมสอบ'}
                           </div>
                         </div>
                       </div>
