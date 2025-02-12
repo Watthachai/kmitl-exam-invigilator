@@ -5,7 +5,7 @@ import { Button } from '@/app/components/ui/button';
 
 export function NetworkError() {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-blue/80 backdrop-blur-sm">
       <div className="text-center space-y-6 p-8 max-w-md mx-auto bg-white rounded-xl shadow-lg">
         <div className="flex justify-center">
           <WifiOff className="h-16 w-16 text-[#FF4E00]" />
@@ -20,14 +20,16 @@ export function NetworkError() {
           </p>
         </div>
 
-        <Button 
-          onClick={() => window.location.reload()}
-          variant="default"
-          className="flex items-center gap-2"
-        >
-          <RefreshCcw className="h-4 w-4" />
-          ลองใหม่อีกครั้ง
-        </Button>
+        <div className="flex justify-center"> {/* Added this wrapper div */}
+          <Button 
+            onClick={() => window.location.reload()}
+            variant="default"
+            className="flex items-center gap-2"
+          >
+            <RefreshCcw className="h-4 w-4" />
+            ลองใหม่อีกครั้ง
+          </Button>
+        </div>
       </div>
     </div>
   );
