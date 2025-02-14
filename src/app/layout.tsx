@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import Loading from './loading';
 import { Suspense } from 'react';
+import { Providers } from "@/components/providers";
 
 const notoSansThai = localFont({
   src: [
@@ -40,9 +41,11 @@ export default function RootLayout({
       <body
         className={`${notoSansThai.variable} font-thai antialiased`}
         >
-        <Suspense fallback={<Loading />}>
-          {children}
-        </Suspense>
+          <Providers>
+            <Suspense fallback={<Loading />}>
+              {children}
+            </Suspense>
+          </Providers>
       </body>
     </html>
   );

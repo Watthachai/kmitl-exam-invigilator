@@ -15,32 +15,46 @@ export default function LoginPage() {
   const router = useRouter();
   const { status, data: session } = useSession();
 
+  // Handle session and routing
   useEffect(() => {
-    // Check for existing session token
-    const sessionToken = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('next-auth.session-token'));
+    if (status === "authenticated") {
+      const redirectPath = session?.user?.role === "admin" ? "/dashboard/admin" : "/dashboard";
+      router.replace(redirectPath); // Use replace instead of push
+      return;
+    }
     
-    if (sessionToken) {
-      setPreviousSession(sessionToken);
+    // Only check for previous session if not authenticated
+    if (status === "unauthenticated") {
+      const sessionToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('next-auth.session-token'));
+      
+      if (sessionToken) {
+        setPreviousSession(sessionToken);
+      }
     }
-  }, []);
+  }, [status, session, router]);
 
-  useEffect(() => {
-    if (status === 'authenticated') {
-      const redirectTimeout = setTimeout(() => {
-        router.push('/dashboard');
-      }, 2000); // Delay redirect for 2 seconds to show welcome message
-
-      return () => clearTimeout(redirectTimeout);
+  // Handle Google login
+  const handleGoogleLogin = async () => {
+    try {
+      setIsLoading(true);
+      await signIn('google', { 
+        redirect: false
+      });
+    } catch (error) {
+      if (!navigator.onLine) {
+        setIsOffline(true);
+      }
+      console.error('Login error:', error);
+    } finally {
+      setIsLoading(false);
     }
-  }, [status, router]);
+  };
 
+  // Handle network status
   useEffect(() => {
-    // Check online status initially
     setIsOffline(!navigator.onLine);
-
-    // Add event listeners for online/offline status
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
 
@@ -53,24 +67,7 @@ export default function LoginPage() {
     };
   }, []);
 
-  const handleGoogleLogin = async () => {
-    setIsLoading(true);
-    try {
-      await signIn('google');
-    } catch (error) {
-      if (!navigator.onLine) {
-        setIsOffline(true);
-      }
-      console.error('Login error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Show network error overlay when offline
-  if (isOffline) {
-    return <NetworkError />;
-  }
+  if (isOffline) return <NetworkError />;
 
   if (status === 'authenticated' && session?.user) {
     return (
