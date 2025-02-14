@@ -69,7 +69,7 @@ export default function DashboardLayout({
             onClick={() => setIsMobileMenuOpen(false)}
           />
         )}
-        <Toaster position="top-right" />
+        <Toaster position="top-center" />
         
         {/* Network Error */}
         {isOffline && <NetworkError />}

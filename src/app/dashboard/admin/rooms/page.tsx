@@ -5,6 +5,8 @@ import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import toast, { Toaster } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ImSpinner8 } from 'react-icons/im';
+import { FiDatabase } from 'react-icons/fi';
 
 interface Schedule {
   id: string;
@@ -138,6 +140,7 @@ export default function RoomsPage() {
   });
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [roomTabs, setRoomTabs] = useState<Record<string, 'morning' | 'afternoon'>>({});
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchRooms();
@@ -145,17 +148,20 @@ export default function RoomsPage() {
 
   const fetchRooms = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch('/api/rooms');
       const result = await response.json();
       
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to fetch rooms');
+        throw new Error(result.error || 'ไม่สามารถโหลดข้อมูลห้องได้');
       }
       
       setRooms(result.data);
     } catch (error) {
       console.error('Failed to fetch rooms:', error);
-      toast.error('Failed to fetch rooms');
+      toast.error('ไม่สามารถโหลดข้อมูลห้องได้');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -169,17 +175,17 @@ export default function RoomsPage() {
       
       if (!response.ok) {
         const error = await response.json();
-        toast.error(error.error || 'Failed to add room');
+        toast.error(error.error || 'ไม่สามารถเพิ่มห้องได้');
         return;
       }
 
-      toast.success('Room added successfully');
+      toast.success('เพิ่มห้องสำเร็จ');
       setShowAddModal(false);
       setFormData({ building: '', roomNumber: '' });
       fetchRooms();
     } catch (error) {
       console.error('Failed to add room:', error);
-      toast.error('Failed to add room');
+      toast.error('ไม่สามารถเพิ่มห้องได้');
     }
   };
 
@@ -261,36 +267,50 @@ export default function RoomsPage() {
     <div className="p-6 space-y-6">
       <Toaster/>
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800">Rooms</h1>
+        <h1 className="text-2xl font-bold text-gray-800">ห้องสอบ</h1>
         <button 
           className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
           onClick={() => setShowAddModal(true)}
         >
-          Add Room
+          เพิ่มห้องสอบ
         </button>
       </div>
 
-      {/* Update table container with better scroll handling */}
+      {/* Table Container */}
       <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100">
-        <div className="relative">
-          {/* Shadow indicators for scroll */}
-          <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-white/50 to-transparent pointer-events-none z-10" />
-          <div className="absolute right-0 top-0 bottom-0 w-4 bg-gradient-to-l from-white/50 to-transparent pointer-events-none z-10" />
-          
-          {/* Scrollable container */}
-          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-            <div className="min-w-[800px]"> {/* Minimum width to prevent squishing */}
+        <div className="h-[calc(100vh-16rem)] overflow-auto">
+          {isLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <ImSpinner8 className="w-8 h-8 text-blue-500 animate-spin" />
+                <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
+              </div>
+            </div>
+          ) : rooms.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <FiDatabase className="w-16 h-16 text-gray-300" />
+                <p className="text-gray-500 text-lg">ไม่พบข้อมูลห้องสอบ</p>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm"
+                >
+                  เพิ่มห้องสอบ
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
               <table className="w-full border-collapse">
-                <thead className="bg-white/95 backdrop-blur-sm sticky top-0 z-20">
+                <thead className="bg-white/95 backdrop-blur-sm sticky top-0">
                   <tr className="border-b border-gray-100">
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Building</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Room Number</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Created At</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Updated At</th>
-                    <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">Actions</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">อาคาร</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">เลขห้อง</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">วันที่สร้าง</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">วันที่แก้ไข</th>
+                    <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">จัดการ</th>
                   </tr>
                 </thead>
-                {/* Update the table body section */}
                 <tbody className="divide-y divide-gray-100">
                   <AnimatePresence mode="wait">
                     {rooms.map((room) => (
@@ -427,89 +447,94 @@ export default function RoomsPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {showAddModal && (
-        <PopupModal
-          title="Add New Room"
-          onClose={() => setShowAddModal(false)}
-          onConfirm={handleAddRoom}
-          confirmText="Add Room"
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="block text-gray-700">Building</label>
-              <input
-                type="text"
-                value={formData.building}
-                onChange={(e) => setFormData({ ...formData, building: e.target.value })}
-                className="w-full border border-gray-300 p-2 rounded-md"
-                placeholder="Enter building name"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-gray-700">Room Number</label>
-              <input
-                type="text"
-                value={formData.roomNumber}
-                onChange={(e) => setFormData({ ...formData, roomNumber: e.target.value })}
-                className="w-full border border-gray-300 p-2 rounded-md"
-                placeholder="Enter room number"
-                required
-              />
-            </div>
-          </div>
-        </PopupModal>
-      )}
+      {/* Modals - Moved outside table container */}
+      {(showAddModal || showEditModal || showDeleteModal) && (
+        <div className="fixed inset-0 z-[100]">
+          {showAddModal && (
+            <PopupModal
+              title="เพิ่มห้องสอบใหม่"
+              onClose={() => setShowAddModal(false)}
+              onConfirm={handleAddRoom}
+              confirmText="เพิ่มห้องสอบ"
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-gray-700">อาคาร</label>
+                  <input
+                    type="text"
+                    value={formData.building}
+                    onChange={(e) => setFormData({ ...formData, building: e.target.value })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                    placeholder="ระบุชื่ออาคาร"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700">เลขห้อง</label>
+                  <input
+                    type="text"
+                    value={formData.roomNumber}
+                    onChange={(e) => setFormData({ ...formData, roomNumber: e.target.value })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                    placeholder="ระบุเลขห้อง"
+                    required
+                  />
+                </div>
+              </div>
+            </PopupModal>
+          )}
 
-      {showEditModal && selectedRoom && (
-        <PopupModal
-          title="Edit Room"
-          onClose={() => setShowEditModal(false)}
-          onConfirm={handleEditRoom}
-          confirmText="Update Room"
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="block text-gray-700">Building</label>
-              <input
-                type="text"
-                value={selectedRoom.building}
-                onChange={(e) => setSelectedRoom({ ...selectedRoom, building: e.target.value })}
-                className="w-full border border-gray-300 p-2 rounded-md"
-                placeholder="Enter building name"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-gray-700">Room Number</label>
-              <input
-                type="text"
-                value={selectedRoom.roomNumber}
-                onChange={(e) => setSelectedRoom({ ...selectedRoom, roomNumber: e.target.value })}
-                className="w-full border border-gray-300 p-2 rounded-md"
-                placeholder="Enter room number"
-                required
-              />
-            </div>
-          </div>
-        </PopupModal>
-      )}
+          {showEditModal && selectedRoom && (
+            <PopupModal
+              title="แก้ไขห้องสอบ"
+              onClose={() => setShowEditModal(false)}
+              onConfirm={handleEditRoom}
+              confirmText="บันทึกการแก้ไข"
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-gray-700">อาคาร</label>
+                  <input
+                    type="text"
+                    value={selectedRoom.building}
+                    onChange={(e) => setSelectedRoom({ ...selectedRoom, building: e.target.value })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                    placeholder="ระบุชื่ออาคาร"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700">เลขห้อง</label>
+                  <input
+                    type="text"
+                    value={selectedRoom.roomNumber}
+                    onChange={(e) => setSelectedRoom({ ...selectedRoom, roomNumber: e.target.value })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                    placeholder="ระบุเลขห้อง"
+                    required
+                  />
+                </div>
+              </div>
+            </PopupModal>
+          )}
 
-      {showDeleteModal && selectedRoom && (
-        <PopupModal
-          title="Delete Room"
-          onClose={() => setShowDeleteModal(false)}
-          onConfirm={handleDeleteRoom}
-          confirmText="Yes, Delete"
-        >
-          <p className="text-gray-700">
-            Are you sure you want to delete room <strong>{selectedRoom.roomNumber}</strong> in building <strong>{selectedRoom.building}</strong>?
-          </p>
-        </PopupModal>
+          {showDeleteModal && selectedRoom && (
+            <PopupModal
+              title="ลบห้องสอบ"
+              onClose={() => setShowDeleteModal(false)}
+              onConfirm={handleDeleteRoom}
+              confirmText="ยืนยันการลบ"
+            >
+              <p className="text-gray-700">
+                คุณต้องการลบห้อง <strong>{selectedRoom.roomNumber}</strong> อาคาร <strong>{selectedRoom.building}</strong> ใช่หรือไม่?
+              </p>
+            </PopupModal>
+          )}
+        </div>
       )}
     </div>
   );

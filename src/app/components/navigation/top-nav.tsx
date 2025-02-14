@@ -1,17 +1,20 @@
 "use client";
 
+import { useState, useEffect } from 'react';
 import { 
   Bell, 
   ChevronDown, 
   Menu, 
-  BellRing, 
+  BellRing,
   UserCog, 
   LogOut,
-  User 
+  User,
+  CheckCheck,
+  X
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
-import { useEffect } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +30,15 @@ import {
   AvatarFallback,
 } from "@/app/components/ui/avatar";
 
+// Add new interface for notifications
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: Date;
+  read: boolean;
+}
+
 interface TopNavProps {
   onMenuClickAction: () => Promise<void>;
 }
@@ -34,6 +46,48 @@ interface TopNavProps {
 export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
   const router = useRouter();
   const { data: session, status } = useSession();
+
+  // Add new states
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('/api/messages');
+      const data = await response.json();
+      setNotifications(data);
+      setUnreadCount(data.filter((n: Notification) => !n.read).length);
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Mark notification as read
+  const markAsRead = async (id: string) => {
+    try {
+      await fetch(`/api/messages/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ read: true }),
+      });
+      await fetchNotifications();
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    // Poll for new notifications every minute
+    const interval = setInterval(fetchNotifications, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -59,9 +113,107 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
 
       {/* Right side - Profile dropdown and notifications */}
       <div className="flex items-center gap-4 ml-auto">
-        <Button variant="default" size="icon">
-          <Bell className="h-5 w-5" />
-        </Button>
+        {/* Updated Notification Button */}
+        <div className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative hover:bg-gray-100 transition-colors"
+          >
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 h-5 w-5 text-xs flex items-center justify-center bg-red-500 text-white rounded-full">
+                {unreadCount}
+              </span>
+            )}
+          </Button>
+
+          {/* Notification Panel */}
+          <AnimatePresence>
+            {showNotifications && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-100 overflow-hidden z-50"
+                >
+                  <div className="p-4 border-b border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold">การแจ้งเตือน</h3>
+                      <button
+                        onClick={() => setShowNotifications(false)}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-[400px] overflow-y-auto">
+                    {isLoading ? (
+                      <div className="p-4 text-center text-gray-500">
+                        กำลังโหลด...
+                      </div>
+                    ) : notifications.length === 0 ? (
+                      <div className="p-4 text-center text-gray-500">
+                        ไม่มีการแจ้งเตือนใหม่
+                      </div>
+                    ) : (
+                      notifications.map((notification) => (
+                        <motion.div
+                          key={notification.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className={`p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer
+                            ${notification.read ? 'bg-white' : 'bg-blue-50'}`}
+                          onClick={() => markAsRead(notification.id)}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <h4 className="text-sm font-medium">{notification.title}</h4>
+                              <p className="text-sm text-gray-500 mt-1">{notification.message}</p>
+                              <p className="text-xs text-gray-400 mt-2">
+                                {new Date(notification.createdAt).toLocaleString('th-TH')}
+                              </p>
+                            </div>
+                            {notification.read && (
+                              <CheckCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
+                            )}
+                          </div>
+                        </motion.div>
+                      ))
+                    )}
+                  </div>
+
+                  {notifications.length > 0 && (
+                    <div className="p-3 bg-gray-50 border-t border-gray-100">
+                      <button
+                        onClick={() => {
+                          // Mark all as read functionality
+                          notifications.forEach(n => !n.read && markAsRead(n.id));
+                        }}
+                        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        อ่านทั้งหมดแล้ว
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+
+                {/* Backdrop */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowNotifications(false)}
+                />
+              </>
+            )}
+          </AnimatePresence>
+        </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

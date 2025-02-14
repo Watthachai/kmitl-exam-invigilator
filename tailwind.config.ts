@@ -17,4 +17,14 @@ export default {
     },
   },
   plugins: [],
+  variants: {
+    extend: {},
+  },
+  layer: {
+    utilities: {
+      '.m-0!': {
+        margin: '0px !important',
+      },
+    },
+  },
 } satisfies Config;
