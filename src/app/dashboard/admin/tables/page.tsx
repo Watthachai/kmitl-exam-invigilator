@@ -8,9 +8,24 @@ import ImportProgress from '@/app/components/ui/import-progress';
 import { FileUpload } from '@/app/dashboard/admin/components/file-upload'
 import { storage } from '@/app/lib/storage';
 import { motion, AnimatePresence } from 'framer-motion';
+import { chunk } from 'lodash';
 
 interface TableData {
   [key: string]: string | number | null | boolean;
+}
+
+interface ImportResult {
+  success: boolean;
+  subject: string;
+  room: string;
+  error?: string;
+}
+
+interface ImportSummary {
+  total: number;
+  successful: number;
+  failed: number;
+  results: ImportResult[];
 }
 
 const EditableCell = ({ value, onChange }: { value: string | number | boolean | null; onChange: (value: string) => void }) => {
@@ -101,6 +116,9 @@ export default function TablePage() {
   const [importLogs, setImportLogs] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [lastUploadedFile, setLastUploadedFile] = useState('');
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const BATCH_SIZE = 50;
 
   const logQueue = useRef<string[]>([]);
   const isProcessingQueue = useRef<boolean>(false);
@@ -290,90 +308,78 @@ const confirmSaveToDatabase = async () => {
     addLog('🚀 Starting import process...');
 
     const dataToSave = isEditing ? editedData : tableData;
-    const totalItems = dataToSave.length;
-    const chunkSize = 10;
-    const totalChunks = Math.ceil(totalItems / chunkSize);
+    const batches = chunk(dataToSave, BATCH_SIZE);
+    const results: ImportResult[] = [];
     
-    for (let i = 0; i < dataToSave.length; i += chunkSize) {
-      const chunk = dataToSave.slice(i, i + chunkSize);
-      const currentChunk = Math.floor(i / chunkSize) + 1;
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      const currentBatch = i + 1;
       
-      // Update progress with detailed steps
-      setImportProgress((currentChunk / totalChunks) * 100);
-      
-      // Log start of chunk processing
-      addLog(`\n📦 Processing Batch ${currentChunk}/${totalChunks}:`);
-      addLog(`⏳ Progress: ${Math.floor((currentChunk / totalChunks) * 100)}%`);
-      addLog('├── 🔄 Initializing database transaction...');
+      setImportProgress((currentBatch / batches.length) * 100);
+      addLog(`\n📦 Processing Batch ${currentBatch}/${batches.length}:`);
 
-      // Log department operations
-      addLog('├── 🏢 Processing Departments (10%)');
-      addLog(`│   ├── Finding department codes...`);
-      addLog(`│   └── Upserting department records...`);
+      try {
+        const response = await fetch('/api/import-excel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data: batch,
+            scheduleOption: scheduleDateOption,
+            examDate: selectedDate?.toISOString()
+          }),
+        });
 
-      // Log professor operations
-      addLog('├── 👥 Processing Professors (30%)');
-      addLog(`│   ├── Creating professor records...`);
-      addLog(`│   └── Updating invigilator data...`);
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Failed to import batch ${currentBatch}`);
+        }
 
-      // Log subject operations
-      addLog('├── 📚 Processing Subjects (50%)');
-      addLog(`│   ├── Upserting subject records...`);
-      addLog(`│   └── Linking departments...`);
+        // Add successful results
+        batch.forEach(row => {
+          results.push({
+            success: true,
+            subject: row["วิชา"]?.toString() || '',
+            room: row["ห้อง"]?.toString() || ''
+          });
+        });
 
-      // Log room operations
-      addLog('├── 🏫 Processing Rooms (70%)');
-      addLog(`│   ├── Creating room records...`);
-      addLog(`│   └── Updating room data...`);
-
-      // Log schedule creation
-      addLog('├── 📅 Creating Schedules (90%)');
-      addLog(`│   ├── Validating time slots...`);
-      addLog(`│   └── Inserting schedule records...`);
-
-      const response = await fetch('/api/import-excel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          data: chunk,
-          scheduleOption: scheduleDateOption,
-          examDate: selectedDate?.toISOString()
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to import batch ${currentChunk}`);
+        addLog(`✅ Batch ${currentBatch} completed successfully`);
+      } catch (error) {
+        console.error(`Batch ${currentBatch} failed:`, error);
+        
+        // Add failed results
+        batch.forEach(row => {
+          results.push({
+            success: false,
+            subject: row["วิชา"]?.toString() || '',
+            room: row["ห้อง"]?.toString() || '',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+        });
+        
+        addLog(`❌ Batch ${currentBatch} failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-
-      await response.json();
-      
-      // Log success for this chunk
-      addLog('└── ✅ Batch Complete:');
-      addLog(`    ├── Records processed: ${chunk.length}`);
-      addLog(`    └── Total progress: ${Math.floor((currentChunk / totalChunks) * 100)}%\n`);
     }
 
-    // Final success state
-    setImportProgress(100);
-    addLog('\n🎉 Import Summary:');
-    addLog(`├── Total records processed: ${totalItems}`);
-    addLog(`├── Number of batches: ${totalChunks}`);
-    addLog(`└── Final Status: Complete ✨`);
-    
+    const summary: ImportSummary = {
+      total: results.length,
+      successful: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      results
+    };
+
+    setImportSummary(summary);
+    setShowSummaryModal(true);
     toast.success('Data imported successfully');
+    
+  } catch (error) {
+    console.error('Import failed:', error);
+    toast.error(error instanceof Error ? error.message : 'An unknown error occurred');
+  } finally {
+    setIsImporting(false);
     setShowDatePrompt(false);
     setScheduleDateOption(null);
     setSelectedDate(null);
-    setIsImporting(false);
-
-  } catch (error) {
-    addLog('\n❌ Error Details:');
-    addLog(`├── Message: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    addLog(`├── Location: Database transaction`);
-    addLog(`└── Status: Import halted`);
-    toast.error(error instanceof Error ? error.message : 'An unknown error occurred');
-    setIsImporting(false);
   }
 };
 
@@ -441,11 +447,7 @@ const addMissingRoomEntries = () => {
 };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="p-6 space-y-6 min-h-screen-auto relative"
-    >
+    <motion.div className="p-6 space-y-6 min-h-screen-auto relative">
       <Toaster
       />
       <div className="flex justify-between items-center mb-4">
@@ -684,83 +686,216 @@ const addMissingRoomEntries = () => {
         </>
       )}
 
-      {/* Date prompt modal with proper z-index */}
-      {showDatePrompt && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
-          <div className="bg-white rounded-lg p-8 max-w-sm space-y-4">
-            <h2 className="text-lg font-bold">เลือกตัวเลือกตารางสอบ</h2>
-            
-            {/* Add Date Picker */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                เลือกวันที่
-              </label>
-              <input
-                type="date"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                value={selectedDate ? selectedDate.toISOString().split('T')[0] : ''}
-                onChange={(e) => setSelectedDate(new Date(e.target.value))}
-                required
-              />
-            </div>
+      {/* Modal Container - ย้ายมารวมกันและจัดลำดับ z-index */}
+      <div className="relative">
+        {/* Date prompt modal */}
+        <AnimatePresence>
+          {showDatePrompt && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center"
+              style={{ zIndex: 40 }}
+            >
+              <motion.div 
+                initial={{ scale: 0.95 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.95 }}
+                className="bg-white rounded-lg p-8 max-w-sm space-y-4 relative"
+              >
+                {/* ปุ่มปิดมุมบนขวา */}
+                <button
+                  onClick={cancelSaveToDatabase}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
 
-            {/* Existing Time Options */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                เลือกช่วงเวลา
-              </label>
-              <div className="space-y-2">
-                <label className="flex items-center space-x-2">
+                <h2 className="text-lg font-bold">เลือกตัวเลือกตารางสอบ</h2>
+                
+                {/* Date Picker */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    เลือกวันที่
+                  </label>
                   <input
-                    type="radio"
-                    value="ช่วงเช้า"
-                    checked={scheduleDateOption === 'ช่วงเช้า'}
-                    onChange={() => setScheduleDateOption('ช่วงเช้า')}
+                    type="date"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    value={selectedDate ? selectedDate.toISOString().split('T')[0] : ''}
+                    onChange={(e) => setSelectedDate(new Date(e.target.value))}
+                    required
                   />
-                  <span>ช่วงเช้า</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    value="ช่วงบ่าย"
-                    checked={scheduleDateOption === 'ช่วงบ่าย'}
-                    onChange={() => setScheduleDateOption('ช่วงบ่าย')}
+                </div>
+
+                {/* Time Options */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    เลือกช่วงเวลา
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        value="ช่วงเช้า"
+                        checked={scheduleDateOption === 'ช่วงเช้า'}
+                        onChange={() => setScheduleDateOption('ช่วงเช้า')}
+                      />
+                      <span>ช่วงเช้า</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        value="ช่วงบ่าย"
+                        checked={scheduleDateOption === 'ช่วงบ่าย'}
+                        onChange={() => setScheduleDateOption('ช่วงบ่าย')}
+                      />
+                      <span>ช่วงบ่าย</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-2 pt-4">
+                  <button
+                    onClick={cancelSaveToDatabase}
+                    className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    onClick={confirmSaveToDatabase}
+                    disabled={!selectedDate || !scheduleDateOption}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-blue-300"
+                  >
+                    ยืนยัน
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Import progress overlay */}
+        <AnimatePresence>
+          {isImporting && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black bg-opacity-50"
+              style={{ zIndex: 50 }}
+            >
+              <div className="fixed inset-0 flex items-center justify-center">
+                <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
+                  <ImportProgress
+                    progress={importProgress}
+                    currentStage={`Importing ${Math.floor(importProgress)}%`}
+                    logs={importLogs}
                   />
-                  <span>ช่วงบ่าย</span>
-                </label>
+                </div>
               </div>
-            </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-            {/* Action Buttons */}
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={cancelSaveToDatabase}
-                className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
+        {/* Import Summary Modal */}
+        <AnimatePresence>
+          {showSummaryModal && importSummary && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center"
+              style={{ zIndex: 60 }}
+            >
+              <motion.div 
+                initial={{ scale: 0.95 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.95 }}
+                className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4"
               >
-                ยกเลิก
-              </button>
-              <button
-                onClick={confirmSaveToDatabase}
-                disabled={!selectedDate || !scheduleDateOption}
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-blue-300"
-              >
-                ยืนยัน
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-bold">สรุปผลการนำเข้าข้อมูล</h2>
+                    <button
+                      onClick={() => setShowSummaryModal(false)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
 
-      {/* Import progress with proper z-index */}
-      {isImporting && (
-        <div className="z-50">
-          <ImportProgress
-            progress={importProgress}
-            currentStage={`Importing ${Math.floor(importProgress)}%`}
-            logs={importLogs}
-          />
-        </div>
-      )}
+                  {/* Status Grid */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <div className="text-blue-600 text-sm">จำนวนทั้งหมด</div>
+                      <div className="text-2xl font-bold">{importSummary.total}</div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <div className="text-green-600 text-sm">สำเร็จ</div>
+                      <div className="text-2xl font-bold">{importSummary.successful}</div>
+                    </div>
+                    <div className="bg-red-50 p-4 rounded-lg">
+                      <div className="text-red-600 text-sm">ไม่สำเร็จ</div>
+                      <div className="text-2xl font-bold">{importSummary.failed}</div>
+                    </div>
+                  </div>
+
+                  {/* Results Table */}
+                  <div className="mt-4">
+                    <h3 className="text-lg font-semibold mb-2">รายละเอียด</h3>
+                    <div className="max-h-96 overflow-y-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สถานะ</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วิชา</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ห้อง</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">หมายเหตุ</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {importSummary.results.map((result, index) => (
+                            <tr key={index} className={result.success ? 'bg-green-50' : 'bg-red-50'}>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {result.success ? (
+                                  <span className="text-green-600">✓ สำเร็จ</span>
+                                ) : (
+                                  <span className="text-red-600">✗ ไม่สำเร็จ</span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">{result.subject}</td>
+                              <td className="px-6 py-4 whitespace-nowrap">{result.room}</td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {result.error && <span className="text-red-500">{result.error}</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Close Button */}
+                  <div className="flex justify-end mt-4">
+                    <button
+                      onClick={() => setShowSummaryModal(false)}
+                      className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                    >
+                      ปิด
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </motion.div>
   );
 }

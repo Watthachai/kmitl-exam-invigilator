@@ -43,6 +43,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/lodash": "^4.17.15",
     "@types/next-auth": "^3.13.0",
     "@types/node": "^20",
     "@types/react": "^18",

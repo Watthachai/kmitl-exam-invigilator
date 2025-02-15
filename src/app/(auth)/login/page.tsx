@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Button } from "@/app/components/ui/button";
 import { Icons } from "@/app/components/ui/icons";
-import { NetworkError } from "@/components/network-error"
+import { NetworkError } from "@/components/network-error";
+import Loading from "@/app/loading";
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -54,9 +55,13 @@ export default function LoginPage() {
 
   // Handle network status
   useEffect(() => {
-    setIsOffline(!navigator.onLine);
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
+
+    // Check initial status
+    if (typeof window !== 'undefined') {
+      setIsOffline(!window.navigator.onLine);
+    }
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -68,6 +73,10 @@ export default function LoginPage() {
   }, []);
 
   if (isOffline) return <NetworkError />;
+
+  if (status === 'loading') {
+    return <Loading />;
+  }
 
   if (status === 'authenticated' && session?.user) {
     return (

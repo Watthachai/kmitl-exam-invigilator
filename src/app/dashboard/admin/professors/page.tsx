@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { FiEdit2, FiTrash2, FiUpload, FiDatabase } from 'react-icons/fi';
 import { ImSpinner8 } from 'react-icons/im';
-import toast, { Toaster } from 'react-hot-toast';
+import toast, { } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
 import * as XLSX from 'xlsx';
 import { motion } from 'framer-motion';
+import { chunk } from 'lodash';
 
 interface Department {
   id: string;
@@ -29,6 +30,20 @@ interface ImportRow {
   department: string;
 }
 
+interface ImportResult {
+  success: boolean;
+  name: string;
+  department: string;
+  error?: string;
+}
+
+interface ImportSummary {
+  total: number;
+  successful: number;
+  failed: number;
+  results: ImportResult[];
+}
+
 export default function ProfessorsPage() {
   const [professors, setProfessors] = useState<Professor[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -47,6 +62,9 @@ export default function ProfessorsPage() {
   const [importProgress, setImportProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const BATCH_SIZE = 50; // Process 50 records at a time
 
   useEffect(() => {
     fetchProfessors();
@@ -191,38 +209,70 @@ export default function ProfessorsPage() {
   const processImportedData = async () => {
     setIsImporting(true);
     let progress = 0;
+    const results: ImportResult[] = [];
+    
+    // Process in batches
+    const batches = chunk(importedData, BATCH_SIZE);
+    
+    for (const batch of batches) {
+      const batchPromises = batch.map(async (row: ImportRow) => {
+        try {
+          const dept = departments.find(d => d.name.includes(row.department));
+          
+          if (!dept) {
+            return {
+              success: false,
+              name: `${row.firstName} ${row.lastName}`,
+              department: row.department,
+              error: 'Department not found'
+            };
+          }
   
-    for (const row of importedData) {
-      try {
-        // Find department by name
-        const dept = departments.find(d => d.name.includes(row.department));
-        
-        if (!dept) {
-          toast.error(`Department not found for: ${row.firstName} ${row.lastName}`);
-          continue;
-        }
+          await fetch('/api/professors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: `${row.firstName} ${row.lastName}`,
+              departmentId: dept.id
+            }),
+          });
   
-        await fetch('/api/professors', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          return {
+            success: true,
             name: `${row.firstName} ${row.lastName}`,
-            departmentId: dept.id
-          }),
-        });
-  
-        progress += (1 / importedData.length) * 100;
-        setImportProgress(Math.round(progress));
-      } catch (error) {
-        console.error('Error importing professor:', error);
-      }
+            department: row.department
+          };
+        } catch (error) {
+          console.error('Error importing professor:', error);
+          return {
+            success: false,
+            name: `${row.firstName} ${row.lastName}`,
+            department: row.department,
+            error: 'Failed to import'
+          };
+        }
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+      
+      progress += (batch.length / importedData.length) * 100;
+      setImportProgress(Math.round(progress));
     }
   
+    const summary: ImportSummary = {
+      total: results.length,
+      successful: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      results
+    };
+  
+    setImportSummary(summary);
+    setShowSummaryModal(true);
     setIsImporting(false);
     setShowImportModal(false);
     setImportedData([]);
     fetchProfessors();
-    toast.success('Import completed successfully');
   };
 
   // Add this function to handle filling empty departments in imported data
@@ -244,7 +294,6 @@ export default function ProfessorsPage() {
     
   return (
     <div className="p-6 space-y-6">
-      <Toaster/>
       {/* Header section */}
       <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
         <h1 className="text-2xl font-bold text-gray-800">จัดการรายชื่ออาจารย์</h1>
@@ -532,6 +581,61 @@ export default function ProfessorsPage() {
                 )}
               </>
             )}
+          </div>
+        </PopupModal>
+      )}
+
+      {/* Import Summary Modal */}
+      {showSummaryModal && importSummary && (
+        <PopupModal
+          title="ผลการนำเข้าข้อมูล"
+          onClose={() => setShowSummaryModal(false)}
+          onConfirm={() => setShowSummaryModal(false)}
+          confirmText="ปิด"
+          className="max-w-4xl"
+        >
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="text-2xl font-bold">{importSummary.total}</div>
+                <div className="text-sm text-gray-600">จำนวนทั้งหมด</div>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">{importSummary.successful}</div>
+                <div className="text-sm text-gray-600">นำเข้าสำเร็จ</div>
+              </div>
+              <div className="bg-red-50 p-4 rounded-lg">
+                <div className="text-2xl font-bold text-red-600">{importSummary.failed}</div>
+                <div className="text-sm text-gray-600">นำเข้าไม่สำเร็จ</div>
+              </div>
+            </div>
+
+            <div className="max-h-[60vh] overflow-auto rounded-lg border">
+              <table className="w-full">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ชื่อ-นามสกุล</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ภาควิชา</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">สถานะ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {importSummary.results.map((result, index) => (
+                    <tr key={index} className={result.success ? 'bg-green-50' : 'bg-red-50'}>
+                      <td className="px-6 py-4 text-sm">{result.name}</td>
+                      <td className="px-6 py-4 text-sm">{result.department}</td>
+                      <td className="px-6 py-4 text-sm">
+                        {result.success ? (
+                          <span className="text-green-600">สำเร็จ</span>
+                        ) : (
+                          <span className="text-red-600">{result.error}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </PopupModal>
       )}

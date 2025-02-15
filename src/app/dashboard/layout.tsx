@@ -62,6 +62,10 @@ export default function DashboardLayout({
     return <Loading />;
   }
 
+  if (isOffline) {
+    return <NetworkError />;
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       <SideNav 
@@ -87,7 +91,7 @@ export default function DashboardLayout({
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
-      <Toaster position="top-right" />
+      <Toaster position="top-center" />
       
       {/* Network Error */}
       {isOffline && <NetworkError />}
