@@ -147,7 +147,6 @@ export default function ProfessorsPage() {
     const file = event.target.files?.[0];
     if (!file) return;
   
-    // Show loading toast
     const loadingToast = toast.loading('กำลังอ่านไฟล์...');
     
     const reader = new FileReader();
@@ -161,14 +160,14 @@ export default function ProfessorsPage() {
           raw: false
         }) as ImportRow[];
         
-        // Remove header row and validate data
+        // Remove header row and only validate names
         const filteredData = jsonData
           .slice(1) // Skip header row
           .filter((row: ImportRow) => 
             row.firstName && 
             row.lastName && 
-            typeof row.firstName === 'string' &&
-            row.department
+            typeof row.firstName === 'string'
+            // Removed department validation
           );
   
         if (filteredData.length === 0) {
@@ -226,6 +225,23 @@ export default function ProfessorsPage() {
     toast.success('Import completed successfully');
   };
 
+  // Add this function to handle filling empty departments in imported data
+  const fillEmptyDepartmentsInImport = () => {
+    let lastDepartment = '';
+    const filledData = importedData.map((row) => {
+      if (row.department) {
+        lastDepartment = row.department;
+        return row;
+      }
+      return {
+        ...row,
+        department: lastDepartment
+      };
+    });
+    setImportedData(filledData);
+    toast.success('เติมข้อมูลภาควิชาเรียบร้อย');
+  };
+    
   return (
     <div className="p-6 space-y-6">
       <Toaster/>
@@ -414,6 +430,7 @@ export default function ProfessorsPage() {
           confirmText={isImporting ? 'กำลังนำเข้า...' : 'นำเข้าข้อมูล'}
           isProcessing={isImporting}
           confirmButtonClass="bg-green-500 hover:bg-green-600"
+          className="max-w-5xl"
         >
           <div className="space-y-6">
             {!importedData.length ? (
@@ -460,23 +477,38 @@ export default function ProfessorsPage() {
               </div>
             ) : (
               <>
-                <div className="max-h-[400px] overflow-auto rounded-lg border border-gray-100">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    รายการข้อมูลที่จะนำเข้า ({importedData.length} รายการ)
+                  </h3>
+                  <button
+                    className="px-5 py-2.5 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors text-sm font-medium"
+                    onClick={fillEmptyDepartmentsInImport}
+                  >
+                    เติมภาควิชาที่ว่าง
+                  </button>
+                </div>
+                <div className="max-h-[60vh] overflow-auto rounded-lg border border-gray-200 shadow-sm">
                   <table className="w-full">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ลำดับ</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ชื่อ</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">นามสกุล</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ภาควิชา</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">ลำดับ</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">ชื่อ</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">นามสกุล</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">ภาควิชา</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-gray-200 bg-white">
                       {importedData.map((row, index) => (
                         <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm text-gray-600">{row.order || index + 1}</td>
-                          <td className="px-4 py-3 text-sm">{row.firstName}</td>
-                          <td className="px-4 py-3 text-sm">{row.lastName}</td>
-                          <td className="px-4 py-3 text-sm">{row.department}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600 font-medium">{row.order || index + 1}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900">{row.firstName}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900">{row.lastName}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900">
+                            {row.department || 
+                              <span className="text-gray-400 italic">ยังไม่ได้ระบุ</span>
+                            }
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -484,8 +516,8 @@ export default function ProfessorsPage() {
                 </div>
   
                 {isImporting && (
-                  <div className="space-y-3">
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="space-y-4 mt-6">
+                    <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
                       <motion.div
                         className="h-full bg-green-500 rounded-full"
                         initial={{ width: 0 }}
@@ -493,7 +525,7 @@ export default function ProfessorsPage() {
                         transition={{ duration: 0.5 }}
                       />
                     </div>
-                    <p className="text-sm text-center text-gray-600">
+                    <p className="text-sm text-center text-gray-600 font-medium">
                       กำลังนำเข้าข้อมูล... {importProgress}%
                     </p>
                   </div>

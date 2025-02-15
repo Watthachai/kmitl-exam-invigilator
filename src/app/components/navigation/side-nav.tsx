@@ -106,24 +106,27 @@ export const SideNav = ({ isMobileMenuOpen, setIsMobileMenuOpen}: SideNavProps) 
         lg:translate-x-0 
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
         z-40
+        flex flex-col
       `}>
         {/* Logo section */}
-        <div className="pt-16 lg:pt-6 px-4 mb-8">
+        <div className="flex-shrink-0 pt-16 lg:pt-6 px-4 mb-8"> {/* Add flex-shrink-0 */}
           <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">
             KMITL Invigilator
           </h1>
           <p className="text-sm text-gray-400 mt-1">ระบบจัดการการคุมสอบ</p>
         </div>
         
-        {/* Navigation Items */}
-        <div className="space-y-1 px-2">
-          {navItems.map((item) => (
-            <NavItem
-              key={item.href}
-              {...item}
-              onClick={closeMobileMenu}
-            />
-          ))}
+        {/* Navigation Items - Add overflow handling */}
+        <div className="flex-1 overflow-y-auto min-h-0 px-2"> {/* Update this div */}
+          <div className="space-y-1">
+            {navItems.map((item) => (
+              <NavItem
+                key={item.href}
+                {...item}
+                onClick={closeMobileMenu}
+              />
+            ))}
+          </div>
         </div>
       </nav>
 

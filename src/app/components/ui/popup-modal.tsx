@@ -62,17 +62,17 @@ export default function PopupModal({
           onClick={(e) => e.stopPropagation()}
         >
           {/* Modal header */}
-          <div className="p-6 border-b border-gray-100">
+          <div className="p-2 border-b border-gray-100">
             <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
           </div>
 
           {/* Modal content */}
-          <div className="p-6">
+          <div className="p-2">
             {children}
           </div>
 
           {/* Modal footer */}
-          <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+          <div className="p-2 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
