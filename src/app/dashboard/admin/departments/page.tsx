@@ -28,7 +28,7 @@ export default function DepartmentsPage() {
   // Initialize with empty array to prevent undefined
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Add State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -173,6 +173,10 @@ export default function DepartmentsPage() {
                 <ImSpinner8 className="w-8 h-8 text-blue-500 animate-spin" />
                 <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
               </div>
+            </div>
+          ) : error ? (
+            <div className="h-full flex items-center justify-center">
+              <p className="text-red-500">{error}</p>
             </div>
           ) : departments.length === 0 ? (
             <div className="h-full flex items-center justify-center">
