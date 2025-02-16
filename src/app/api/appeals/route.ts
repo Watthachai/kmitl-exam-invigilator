@@ -76,3 +76,52 @@ export async function POST(req: Request) {
     );
   }
 }
+
+// GET handler
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check if user is admin
+    if (session.user.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const appeals = await prisma.appeal.findMany({
+      include: {
+        user: {
+          select: {
+            name: true,
+            role: true
+          }
+        },
+        schedule: {
+          include: {
+            room: true,
+            subjectGroup: {
+              include: {
+                subject: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    return NextResponse.json(appeals);
+
+  } catch (error) {
+    console.error('Failed to fetch appeals:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch appeals' },
+      { status: 500 }
+    );
+  }
+}

@@ -9,7 +9,6 @@ import {
   UserCog, 
   LogOut,
   User,
-  CheckCheck,
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -39,6 +38,22 @@ interface Notification {
   read: boolean;
 }
 
+interface AppealNotification {
+  id: string;
+  type: 'CHANGE_DATE' | 'FIND_REPLACEMENT';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: Date;
+  read: boolean;
+  schedule: {
+    subjectGroup: {
+      subject: {
+        name: string;
+      }
+    }
+  };
+  adminResponse?: string;
+}
+
 interface TopNavProps {
   onMenuClickAction: () => Promise<void>;
 }
@@ -57,10 +72,17 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
   const fetchNotifications = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/messages');
+      const response = await fetch('/api/appeals/my-appeals', {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch appeals');
+      }
+      
       const data = await response.json();
       setNotifications(data);
-      setUnreadCount(data.filter((n: Notification) => !n.read).length);
+      setUnreadCount(data.filter((n: AppealNotification) => !n.read).length);
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
     } finally {
@@ -167,20 +189,35 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
                           className={`p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer
-                            ${notification.read ? 'bg-white' : 'bg-blue-50'}`}
-                          onClick={() => markAsRead(notification.id)}
+                            ${notification.status === 'PENDING' ? 'bg-yellow-50' :
+                              notification.status === 'APPROVED' ? 'bg-green-50' : 
+                              notification.status === 'REJECTED' ? 'bg-red-50' : 'bg-white'}`}
                         >
                           <div className="flex items-start justify-between">
                             <div>
-                              <h4 className="text-sm font-medium">{notification.title}</h4>
-                              <p className="text-sm text-gray-500 mt-1">{notification.message}</p>
+                              <h4 className="text-sm font-medium">
+                                {notification.type === 'CHANGE_DATE' ? 'ขอเปลี่ยนวันสอบ' : 'ขอหาผู้คุมสอบแทน'}
+                              </h4>
+                              <p className="text-sm text-gray-500 mt-1">
+                                {notification.schedule.subjectGroup.subject.name}
+                              </p>
+                              {notification.adminResponse && (
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {notification.adminResponse}
+                                </p>
+                              )}
                               <p className="text-xs text-gray-400 mt-2">
                                 {new Date(notification.createdAt).toLocaleString('th-TH')}
                               </p>
                             </div>
-                            {notification.read && (
-                              <CheckCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
-                            )}
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              notification.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                              notification.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {notification.status === 'PENDING' ? 'รอดำเนินการ' :
+                              notification.status === 'APPROVED' ? 'อนุมัติ' : 'ไม่อนุมัติ'}
+                            </span>
                           </div>
                         </motion.div>
                       ))
