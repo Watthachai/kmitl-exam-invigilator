@@ -14,21 +14,50 @@ export async function GET() {
       );
     }
 
+    // หา user และตรวจสอบว่าเป็น invigilator หรือไม่
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: {
+        invigilator: true,  // เพิ่ม relation กับ invigilator
+        professor: true     // เพิ่ม relation กับ professor
+      }
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    // ค้นหาตารางสอบตาม invigilator หรือ professor id
     const schedules = await prisma.schedule.findMany({
       where: {
-        invigilators: {
-          some: {
-            id: session.user.id
+        OR: [
+          // กรณีเป็น invigilator (บุคลากร)
+          {
+            invigilatorId: user.invigilator?.id
+          },
+          // กรณีเป็น professor (อาจารย์)
+          {
+            subjectGroup: {
+              professorId: user.professor?.id
+            }
           }
-        }
+        ]
       },
       include: {
         room: true,
         subjectGroup: {
           include: {
-            subject: true
+            subject: true,
+            professor: true
           }
-        }
+        },
+        invigilator: true
+      },
+      orderBy: {
+        date: 'asc'
       }
     });
 
