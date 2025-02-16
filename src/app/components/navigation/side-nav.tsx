@@ -25,9 +25,9 @@ const adminNavItems = [
 
 const userNavItems = [
   { href: '/dashboard', label: 'แดชบอร์ด', icon: Home },
-  { href: '/schedule', label: 'ตารางคุมสอบ', icon: Calendar },
-  { href: '/complaints', label: 'ร้องเรียน', icon: MessageCircle },
-  { href: '/profile', label: 'โปรไฟล์', icon: User },
+  { href: '/dashboard/schedule', label: 'ตารางคุมสอบ', icon: Calendar },
+  { href: '/dashboard/appeal', label: 'ร้องเรียน', icon: MessageCircle },
+  { href: '/dashboard/profile', label: 'โปรไฟล์', icon: User },
 ];
 
 // Updated NavItem component with improved styling

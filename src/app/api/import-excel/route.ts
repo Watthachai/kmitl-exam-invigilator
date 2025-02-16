@@ -67,24 +67,42 @@ async function findOrCreateProfessors(
       update: existingProf?.departmentId ? {} : { departmentId: department.id }
     });
 
-    // Create/update invigilator with same logic
-    await prismaClient.invigilator.upsert({
-      where: { professorId: professor.id },
-      create: {
-        name: professor.name,
-        type: 'อาจารย์',
-        department: { connect: { id: department.id } },
-        professor: { connect: { id: professor.id } },
-        quota: 4,
-        assignedQuota: 0
-      },
-      update: {
-        name: professor.name,
-        ...(existingProf?.departmentId ? {} : {
-          department: { connect: { id: department.id } }
-        })
+    // ตรวจสอบ invigilator ที่มีอยู่แล้ว
+    const existingInvigilator = await prismaClient.invigilator.findFirst({
+      where: {
+        OR: [
+          { professorId: professor.id },
+          { 
+            AND: {
+              type: 'อาจารย์',
+              name: professor.name
+            }
+          }
+        ]
       }
     });
+
+    if (!existingInvigilator) {
+      // สร้าง invigilator ใหม่เฉพาะเมื่อยังไม่มี
+      await prismaClient.invigilator.create({
+        data: {
+          name: professor.name,
+          type: 'อาจารย์',
+          department: { connect: { id: department.id } },
+          professor: { connect: { id: professor.id } },
+          quota: 4,
+          assignedQuota: 0
+        }
+      });
+    } else if (existingInvigilator.professorId !== professor.id) {
+      // อัพเดทการเชื่อมโยงกับ professor ถ้าจำเป็น
+      await prismaClient.invigilator.update({
+        where: { id: existingInvigilator.id },
+        data: {
+          professor: { connect: { id: professor.id } }
+        }
+      });
+    }
     
     professors.push(professor);
   }
