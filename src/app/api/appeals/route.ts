@@ -22,40 +22,24 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if schedule exists and belongs to user
-    const schedule = await prisma.schedule.findFirst({
-      where: {
-        id: scheduleId,
-        invigilators: {
-          some: {
-            id: session.user.id
-          }
-        }
-      }
-    });
-
-    if (!schedule) {
-      return NextResponse.json(
-        { error: 'Schedule not found or not assigned to user' },
-        { status: 404 }
-      );
-    }
-
     // Create new appeal
     const appeal = await prisma.appeal.create({
       data: {
-        userId: session.user.id,
-        scheduleId,
+        user: {
+          connect: { id: session.user.id }
+        },
+        schedule: {
+          connect: { id: scheduleId }
+        },
         type,
         reason,
         preferredDates: preferredDates?.map((date: string) => new Date(date)) || [],
-        notes: additionalNotes,
+        additionalNotes,
         status: 'PENDING'
       },
       include: {
         schedule: {
           include: {
-            room: true,
             subjectGroup: {
               include: {
                 subject: true
@@ -77,18 +61,12 @@ export async function POST(req: Request) {
   }
 }
 
-// GET handler
+// GET handler for admin to fetch all appeals
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Check if user is admin
-    if (session.user.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const appeals = await prisma.appeal.findMany({
@@ -101,7 +79,6 @@ export async function GET() {
         },
         schedule: {
           include: {
-            room: true,
             subjectGroup: {
               include: {
                 subject: true

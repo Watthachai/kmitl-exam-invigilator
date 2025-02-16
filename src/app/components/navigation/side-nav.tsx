@@ -13,7 +13,7 @@ const adminNavItems = [
   { href: '/dashboard/admin/tables', label: 'นำเข้าตารางสอบ', icon: Table },
   { href: '/dashboard/admin/departments', label: 'ภาควิชา', icon: Book },
   { href: '/dashboard/admin/invigilators', label: 'ผู้คุมสอบ', icon: Users },
-  { href: '/dashboard/admin/messages', label: 'ข้อความ', icon: MessageCircle },
+  { href: '/dashboard/admin/appeals', label: 'กล่องร้องเรียน', icon: MessageCircle },
   { href: '/dashboard/admin/professors', label: 'อาจารย์', icon: Users },
   { href: '/dashboard/admin/exams', label: 'ตารางสอบ', icon: Calendar },
   { href: '/dashboard/admin/subjects', label: 'รายวิชา', icon: Book },

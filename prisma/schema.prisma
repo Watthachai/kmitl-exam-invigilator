@@ -182,18 +182,19 @@ model Department {
 }
 
 model Appeal {
-  id             String     @id @default(cuid()) @map("AppealID")
-  user           User       @relation(fields: [userId], references: [id])
+  id             String   @id @default(cuid()) @map("AppealID")
+  user           User     @relation(fields: [userId], references: [id])
   userId         String
-  schedule       Schedule   @relation(fields: [scheduleId], references: [id])
+  schedule       Schedule @relation(fields: [scheduleId], references: [id])
   scheduleId     String
-  type           String // 'CHANGE_DATE' | 'FIND_REPLACEMENT'
-  reason         String // เหตุผลในการร้องเรียน
-  preferredDates DateTime[] // วันที่ต้องการสลับ (สำหรับ CHANGE_DATE)
-  status         String     @default("PENDING") // 'PENDING' | 'APPROVED' | 'REJECTED'
-  notes          String? // หมายเหตุเพิ่มเติม
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  type           String   // 'CHANGE_DATE' | 'FIND_REPLACEMENT'
+  reason         String
+  preferredDates DateTime[]
+  status         String   @default("PENDING") // 'PENDING' | 'APPROVED' | 'REJECTED'
+  additionalNotes String?
+  adminResponse  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([userId])
   @@index([scheduleId])
