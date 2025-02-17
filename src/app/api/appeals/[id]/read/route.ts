@@ -10,6 +10,7 @@ export async function PUT(
     try {
       const session = await getServerSession(authOptions);
       const { id } = await params;
+      const data = await request.json();
       
       if (!session?.user?.id) {
         return NextResponse.json(
@@ -18,22 +19,30 @@ export async function PUT(
         );
       }
   
-      const appeal = await prisma.appeal.update({
+      const updatedAppeal = await prisma.appeal.update({
         where: {
           id: id,
           userId: session.user.id
         },
         data: {
-          read: true
+          read: true,
+          ...data
         }
       });
   
-      return NextResponse.json(appeal);
+      return new Response(JSON.stringify(updatedAppeal), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
     } catch (error) {
       console.error('Failed to mark appeal as read:', error);
-      return NextResponse.json(
-        { error: 'Failed to mark appeal as read' },
-        { status: 500 }
-      );
+      return new Response(JSON.stringify({ error: 'Failed to update appeal' }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
     }
   }
