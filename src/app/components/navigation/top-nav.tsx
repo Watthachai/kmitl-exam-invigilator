@@ -124,37 +124,48 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
     const socketInstance = initSocket();
     setSocket(socketInstance);
 
-    // Join user's room
-    if (session?.user?.id && socketInstance) {
+    if (socketInstance && session?.user?.id) {
+      // Join user's room
       socketInstance.emit('join', session.user.id);
-    }
+      
+      // Join admin room if user is admin
+      if (session.user.role === 'admin') {
+        socketInstance.emit('join', 'admin');
+      }
 
-    // Listen for new notifications
-    if (socketInstance) {
-      socketInstance.on('newAppeal', async () => {
-        await fetchNotifications();
-        // Use socket state here if needed
-        if (socket) {
-          socket.emit('notificationReceived', session?.user?.id);
-        }
+      // Listen for new appeals (for admins)
+      socketInstance.on('newAppeal', (data) => {
+        console.log('New appeal received:', data);
+        toast.success('มีคำร้องเรียนใหม่');
+        fetchNotifications();
       });
 
-      socketInstance.on('appealUpdated', async () => {
-        await fetchNotifications();
-        // Use socket state here if needed
-        if (socket) {
-          socket.emit('notificationRead', session?.user?.id);
-        }
+      // Listen for appeal updates (for users)
+      socketInstance.on('appealUpdated', (data) => {
+        console.log('Appeal updated:', data);
+        toast.info('คำร้องเรียนมีการอัพเดท');
+        fetchNotifications();
+      });
+
+      // Handle connection status
+      socketInstance.on('connect', () => {
+        console.log('Socket connected:', socketInstance.id);
+      });
+
+      socketInstance.on('disconnect', () => {
+        console.log('Socket disconnected');
       });
     }
 
-    // Cleanup on unmount
+    // Cleanup
     return () => {
       if (socketInstance) {
+        socketInstance.off('newAppeal');
+        socketInstance.off('appealUpdated');
         socketInstance.disconnect();
       }
     };
-  }, [session?.user?.id, socket]);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (status === "unauthenticated") {

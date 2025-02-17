@@ -13,7 +13,7 @@ app.prepare().then(() => {
     handle(req, res, parsedUrl);
   });
 
-  // Initialize Socket.IO
+  // Initialize Socket.IO with the server
   const io = new SocketIOServer(server, {
     path: '/api/socketio',
     addTrailingSlash: false,

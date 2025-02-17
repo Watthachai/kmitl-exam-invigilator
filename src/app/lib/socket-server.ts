@@ -28,9 +28,14 @@ export function initSocketServer(server: NetServer) {
     io.on('connection', (socket) => {
       console.log('Client connected:', socket.id);
 
-      socket.on('join', (userId: string) => {
-        socket.join(userId);
-        console.log('User joined room:', userId);
+      socket.on('join', (room: string) => {
+        socket.join(room);
+        console.log(`Socket ${socket.id} joined room: ${room}`);
+      });
+
+      socket.on('leave', (room: string) => {
+        socket.leave(room);
+        console.log(`Socket ${socket.id} left room: ${room}`);
       });
 
       socket.on('disconnect', () => {

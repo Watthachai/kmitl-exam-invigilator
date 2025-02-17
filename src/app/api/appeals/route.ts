@@ -51,18 +51,22 @@ export async function POST(req: Request) {
       }
     });
 
-    const response = NextResponse.json(appeal);
-    const io = getSocketIO(response);
-    
+    // Get Socket.IO instance and emit events
+    const io = getSocketIO();
     if (io) {
-      // Emit to admin users
-      io.to('admin').emit('newAppeal', appeal);
-      
-      // Emit to the user who created the appeal
-      io.to(session.user.id).emit('appealCreated', appeal);
+      console.log('Emitting newAppeal event to admin room');
+      io.to('admin').emit('newAppeal', {
+        type: 'NEW_APPEAL',
+        appeal: appeal
+      });
+      console.log('Emitting appealUpdated event to user:', session.user.id);
+      io.to(session.user.id).emit('appealUpdated', {
+        type: 'APPEAL_CREATED',
+        appeal: appeal
+      });
     }
 
-    return response;
+    return NextResponse.json(appeal);
 
   } catch (error) {
     console.error('Failed to create appeal:', error);
