@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { options as authOptions } from "@/app/api/auth/[...nextauth]/options";
 import prisma from '@/app/lib/prisma';
-import { getSocketIO } from '@/lib/socket';
+import { getSocketIO } from '@/app/lib/socket-server'
 
 export async function POST(req: Request) {
   try {

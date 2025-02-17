@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { options as authOptions } from "@/app/api/auth/[...nextauth]/options";
 import prisma from '@/app/lib/prisma';
-import { getSocketIO } from '@/lib/socket';
+import { getSocketIO } from '@/app/lib/socket-server';
 
 export async function PUT(
   request: Request,
@@ -40,7 +40,7 @@ export async function PUT(
     });
 
     const response = NextResponse.json(appeal);
-    const io = getSocketIO(response);
+    const io = getSocketIO();
     
     if (io) {
       io.to(appeal.userId).emit('appealUpdated', appeal);

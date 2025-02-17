@@ -138,16 +138,17 @@ export default function DepartmentsPage() {
         const data = await response.json();
         // Ensure we always set an array
         setDepartments(Array.isArray(data) ? data : []);
+        setError(null); // Clear any previous errors
       } catch (error) {
         console.error('Error:', error);
         setDepartments([]); // Reset to empty array on error
-        setError('Failed to fetch departments. Please try again later.');
+        setError(error instanceof Error ? error.message : 'Failed to fetch departments');
       } finally {
         setIsLoading(false);
       }
     };
     fetchDepartments();
-  }, [setError]);
+  }, []);
 
   return (
     <div className="p-6 space-y-6">

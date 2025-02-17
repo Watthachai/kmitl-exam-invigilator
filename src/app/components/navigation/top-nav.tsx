@@ -14,6 +14,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
+import { toast } from 'react-hot-toast';
 import { initSocket } from '@/lib/socket';
 import {
   DropdownMenu,
@@ -143,7 +144,7 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
       // Listen for appeal updates (for users)
       socketInstance.on('appealUpdated', (data) => {
         console.log('Appeal updated:', data);
-        toast.info('คำร้องเรียนมีการอัพเดท');
+        toast('คำร้องเรียนมีการอัพเดท');
         fetchNotifications();
       });
 
@@ -165,7 +166,7 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
         socketInstance.disconnect();
       }
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, session?.user?.role]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
