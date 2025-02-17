@@ -14,6 +14,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
+import { initSocket } from '@/lib/socket';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,14 +31,6 @@ import {
 } from "@/app/components/ui/avatar";
 
 // Add new interface for notifications
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  createdAt: Date;
-  read: boolean;
-}
-
 interface AppealNotification {
   id: string;
   type: 'CHANGE_DATE' | 'FIND_REPLACEMENT';
@@ -63,10 +56,11 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
   const { data: session, status } = useSession();
 
   // Add new states
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<AppealNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [socket, setSocket] = useState<any>(null);
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -93,23 +87,48 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
   // Mark notification as read
   const markAsRead = async (id: string) => {
     try {
-      await fetch(`/api/messages/${id}`, {
+      await fetch(`/api/appeals/${id}/read`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ read: true }),
+        credentials: 'include'
       });
       await fetchNotifications();
     } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+      console.error('Failed to mark appeal as read:', error);
     }
   };
 
   useEffect(() => {
+    // Initial fetch
     fetchNotifications();
-    // Poll for new notifications every minute
-    const interval = setInterval(fetchNotifications, 60000);
-    return () => clearInterval(interval);
-  }, []);
+
+    // Initialize socket connection
+    const socketInstance = initSocket();
+    setSocket(socketInstance);
+
+    // Join user's room
+    if (session?.user?.id && socketInstance) {
+      socketInstance.emit('join', session.user.id);
+    }
+
+    // Listen for new notifications
+    if (socketInstance) {
+      socketInstance.on('newAppeal', async () => {
+        await fetchNotifications();
+      });
+
+      socketInstance.on('appealUpdated', async () => {
+        await fetchNotifications();
+      });
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (socketInstance) {
+        socketInstance.disconnect();
+      }
+    };
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (status === "unauthenticated") {

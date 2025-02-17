@@ -2,13 +2,15 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { options as authOptions } from "@/app/api/auth/[...nextauth]/options";
 import prisma from '@/app/lib/prisma';
+import { getSocketIO } from '@/lib/socket';
 
 export async function PUT(
-  req: Request,
-  { params }: { params: { id: string } }
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
+    const { id } = await params;
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -18,7 +20,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { status, adminResponse } = await req.json();
+    const { status, adminResponse } = await request.json();
 
     // Validate required fields for rejection
     if (status === 'REJECTED' && !adminResponse) {
@@ -29,7 +31,7 @@ export async function PUT(
     }
 
     const appeal = await prisma.appeal.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         status,
         adminResponse,
@@ -37,7 +39,15 @@ export async function PUT(
       }
     });
 
-    return NextResponse.json(appeal);
+    const response = NextResponse.json(appeal);
+    const io = getSocketIO(response);
+    
+    if (io) {
+      io.to(appeal.userId).emit('appealUpdated', appeal);
+    }
+
+    return response;
+
   } catch (error) {
     console.error('Failed to update appeal:', error);
     return NextResponse.json(

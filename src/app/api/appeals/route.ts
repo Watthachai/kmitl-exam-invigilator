@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { options as authOptions } from "@/app/api/auth/[...nextauth]/options";
 import prisma from '@/app/lib/prisma';
+import { getSocketIO } from '@/lib/socket';
 
 export async function POST(req: Request) {
   try {
@@ -50,7 +51,18 @@ export async function POST(req: Request) {
       }
     });
 
-    return NextResponse.json(appeal);
+    const response = NextResponse.json(appeal);
+    const io = getSocketIO(response);
+    
+    if (io) {
+      // Emit to admin users
+      io.to('admin').emit('newAppeal', appeal);
+      
+      // Emit to the user who created the appeal
+      io.to(session.user.id).emit('appealCreated', appeal);
+    }
+
+    return response;
 
   } catch (error) {
     console.error('Failed to create appeal:', error);
