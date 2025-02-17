@@ -29,6 +29,7 @@ import {
   AvatarImage,
   AvatarFallback,
 } from "@/app/components/ui/avatar";
+import { Socket } from 'socket.io-client';
 
 // Add new interface for notifications
 interface AppealNotification {
@@ -60,7 +61,7 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [socket, setSocket] = useState<any>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -98,6 +99,23 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
     }
   };
 
+  const handleNotificationClick = (notificationId: string) => {
+    if (socket) {
+      socket.emit('notificationClicked', {
+        userId: session?.user?.id,
+        notificationId
+      });
+    }
+    markAsRead(notificationId);
+  };
+
+  const handleMarkAllAsRead = () => {
+    if (socket) {
+      socket.emit('markAllRead', session?.user?.id);
+    }
+    notifications.forEach(n => !n.read && markAsRead(n.id));
+  };
+
   useEffect(() => {
     // Initial fetch
     fetchNotifications();
@@ -115,10 +133,18 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
     if (socketInstance) {
       socketInstance.on('newAppeal', async () => {
         await fetchNotifications();
+        // Use socket state here if needed
+        if (socket) {
+          socket.emit('notificationReceived', session?.user?.id);
+        }
       });
 
       socketInstance.on('appealUpdated', async () => {
         await fetchNotifications();
+        // Use socket state here if needed
+        if (socket) {
+          socket.emit('notificationRead', session?.user?.id);
+        }
       });
     }
 
@@ -128,7 +154,7 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
         socketInstance.disconnect();
       }
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, socket]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -207,6 +233,7 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
                           key={notification.id}
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
+                          onClick={() => handleNotificationClick(notification.id)}
                           className={`p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer
                             ${notification.status === 'PENDING' ? 'bg-yellow-50' :
                               notification.status === 'APPROVED' ? 'bg-green-50' : 
@@ -246,10 +273,7 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
                   {notifications.length > 0 && (
                     <div className="p-3 bg-gray-50 border-t border-gray-100">
                       <button
-                        onClick={() => {
-                          // Mark all as read functionality
-                          notifications.forEach(n => !n.read && markAsRead(n.id));
-                        }}
+                        onClick={handleMarkAllAsRead}
                         className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                       >
                         อ่านทั้งหมดแล้ว

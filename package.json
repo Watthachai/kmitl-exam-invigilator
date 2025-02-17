@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "ts-node --project tsconfig.server.json server.ts",
-    "build": "next build",
-    "start": "NODE_ENV=production ts-node --project tsconfig.server.json server.ts"
+    "dev": "next dev --turbopack",
+    "build": "next build && tsc --project tsconfig.server.json",
+    "start": "NODE_ENV=production node dist/server.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -51,11 +51,13 @@
     "@types/lodash": "^4.17.15",
     "@types/next-auth": "^3.13.0",
     "@types/node": "^20",
+    "@types/nodemon": "^1.19.6",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/socket.io": "^3.0.1",
     "eslint": "^8",
     "eslint-config-next": "15.1.2",
+    "nodemon": "^3.1.9",
     "postcss": "^8",
     "prisma": "^6.3.0",
     "tailwindcss": "^3.4.1",
