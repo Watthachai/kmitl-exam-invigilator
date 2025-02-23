@@ -43,17 +43,17 @@ interface TabContentProps {
   isVisible: boolean;
 }
 
-// Add this component for Tab Content
+// แก้ไข TabContent component
 const TabContent: React.FC<TabContentProps> = ({ schedules, activeTab, isVisible }) => {
   return (
     <AnimatePresence mode="wait">
       {isVisible && (
         <motion.div
-          initial={{ opacity: 0, x: activeTab === 'morning' ? -20 : 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: activeTab === 'morning' ? 20 : -20 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="space-y-6"
+          className="p-2 sm:p-4 space-y-4"
         >
           {Object.entries(
             schedules.reduce<Record<string, Schedule[]>>((acc, schedule) => {
@@ -64,7 +64,7 @@ const TabContent: React.FC<TabContentProps> = ({ schedules, activeTab, isVisible
             }, {})
           ).map(([date, daySchedules]: [string, Schedule[]]) => (
             <div key={date} className="space-y-3">
-              <h5 className="font-medium text-gray-600">
+              <h5 className="font-medium text-gray-600 sticky top-0 bg-gray-50/80 backdrop-blur-sm py-2 px-3 rounded-lg z-10">
                 {new Date(date).toLocaleDateString('th-TH', {
                   weekday: 'long',
                   year: 'numeric',
@@ -83,12 +83,12 @@ const TabContent: React.FC<TabContentProps> = ({ schedules, activeTab, isVisible
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
                       className={`rounded-lg border p-4 transition-all hover:shadow-md
-                        ${activeTab === 'morning' ? 'bg-yellow-50' : 'bg-blue-50'}`}
+                        ${activeTab === 'morning' ? 'bg-yellow-50/70' : 'bg-blue-50/70'}`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <span className={`px-3 py-1 rounded-full bg-white border ${
-                            activeTab === 'morning' ? 'text-yellow-600' : 'text-blue-600'
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                          <span className={`px-3 py-1.5 rounded-full bg-white border text-sm whitespace-nowrap ${
+                            activeTab === 'morning' ? 'text-yellow-600 border-yellow-200' : 'text-blue-600 border-blue-200'
                           }`}>
                             {new Date(schedule.startTime).toLocaleTimeString('th-TH', {
                               hour: '2-digit',
@@ -103,12 +103,12 @@ const TabContent: React.FC<TabContentProps> = ({ schedules, activeTab, isVisible
                             <div className="font-medium text-gray-900">
                               {schedule.subjectGroup?.subject?.code || 'N/A'}
                             </div>
-                            <div className="text-sm text-gray-600">
+                            <div className="text-sm text-gray-600 max-w-md truncate">
                               {schedule.subjectGroup?.subject?.name || 'N/A'}
                             </div>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="flex flex-col items-end">
                           <div className="text-sm text-gray-600">
                             กลุ่ม {schedule.subjectGroup?.groupNumber || 'N/A'}
                           </div>
@@ -264,190 +264,203 @@ export default function RoomsPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <Toaster/>
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800">ห้องสอบ</h1>
-        <button 
-          className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-          onClick={() => setShowAddModal(true)}
-        >
-          เพิ่มห้องสอบ
-        </button>
-      </div>
+    <div className="min-h-screen flex flex-col">
+      <div className="p-4 sm:p-6 flex-1 flex flex-col max-w-[1920px] mx-auto w-full">
+        <Toaster/>
+        
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">ห้องสอบ</h1>
+          <button 
+            className="px-3 py-1.5 sm:px-4 sm:py-2 bg-blue-500 text-white text-sm sm:text-base rounded-md hover:bg-blue-600 transition-colors"
+            onClick={() => setShowAddModal(true)}
+          >
+            เพิ่มห้องสอบ
+          </button>
+        </div>
 
-      {/* Table Container */}
-      <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100">
-        <div className="h-[calc(100vh-16rem)] overflow-auto">
-          {isLoading ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3">
-                <ImSpinner8 className="w-8 h-8 text-blue-500 animate-spin" />
-                <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
+        {/* Table Container */}
+        <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100 flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-h-0"> {/* Add min-h-0 to allow flex child to scroll */}
+            {isLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                  <ImSpinner8 className="w-8 h-8 text-blue-500 animate-spin" />
+                  <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
+                </div>
               </div>
-            </div>
-          ) : rooms.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3">
-                <FiDatabase className="w-16 h-16 text-gray-300" />
-                <p className="text-gray-500 text-lg">ไม่พบข้อมูลห้องสอบ</p>
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm"
-                >
-                  เพิ่มห้องสอบ
-                </button>
+            ) : rooms.length === 0 ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                  <FiDatabase className="w-16 h-16 text-gray-300" />
+                  <p className="text-gray-500 text-lg">ไม่พบข้อมูลห้องสอบ</p>
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm"
+                  >
+                    เพิ่มห้องสอบ
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead className="bg-white/95 backdrop-blur-sm sticky top-0">
-                  <tr className="border-b border-gray-100">
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">อาคาร</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">เลขห้อง</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">วันที่สร้าง</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">วันที่แก้ไข</th>
-                    <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">จัดการ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  <AnimatePresence mode="wait">
-                    {rooms.map((room) => (
-                      <React.Fragment key={room.id}>
-                        <tr className="hover:bg-gray-50">
-                          <td className="px-6 py-4">
-                            <button 
-                              onClick={() => toggleRow(room.id)}
-                              className="flex items-center gap-2 group"
-                            >
-                              <motion.span
-                                initial={false}
-                                animate={{ rotate: expandedRows.has(room.id) ? 180 : 0 }}
-                                transition={{ duration: 0.2 }}
-                                className="text-gray-400 group-hover:text-gray-600"
-                              >
-                                ▼
-                              </motion.span>
-                              {room.building}
-                            </button>
-                          </td>
-                          <td className="px-6 py-4">{room.roomNumber}</td>
-                          <td className="px-6 py-4">{new Date(room.createdAt).toLocaleDateString()}</td>
-                          <td className="px-6 py-4">{new Date(room.updatedAt).toLocaleDateString()}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                onClick={() => {
-                                  setSelectedRoom(room);
-                                  setShowEditModal(true);
-                                }}
-                                className="flex items-center gap-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                              >
-                                <FiEdit2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setSelectedRoom(room);
-                                  setShowDeleteModal(true);
-                                }}
-                                className="flex items-center gap-1 px-3 py-1 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                              >
-                                <FiTrash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                        <AnimatePresence>
-                          {expandedRows.has(room.id) && room.schedules.length > 0 && (
-                            <motion.tr
-                              initial={{ opacity: 0, height: 0 }}
-                              animate={{ 
-                                opacity: 1, 
-                                height: 'auto',
-                                transition: { duration: 0.3 }
-                              }}
-                              exit={{ 
-                                opacity: 0, 
-                                height: 0,
-                                transition: { duration: 0.2 }
-                              }}
-                              className="bg-gray-50"
-                            >
-                              <td colSpan={5} className="px-6 py-4">
-                                <motion.div 
-                                  initial={{ opacity: 0, y: -20 }}
+            ) : (
+              <div className="flex-1 flex flex-col min-h-0"> {/* Nested flex container */}
+                <div className="overflow-auto flex-1"> {/* This will scroll */}
+                  <table className="w-full border-collapse">
+                    <thead className="bg-white/95 backdrop-blur-sm sticky top-0">
+                      <tr className="border-b border-gray-100">
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">อาคาร</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">เลขห้อง</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">วันที่สร้าง</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">วันที่แก้ไข</th>
+                        <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">จัดการ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      <AnimatePresence mode="wait">
+                        {rooms.map((room) => (
+                          <React.Fragment key={room.id}>
+                            <tr className="hover:bg-gray-50">
+                              <td className="px-6 py-4">
+                                <button 
+                                  onClick={() => toggleRow(room.id)}
+                                  className="flex items-center gap-2 group"
+                                >
+                                  <motion.span
+                                    initial={false}
+                                    animate={{ rotate: expandedRows.has(room.id) ? 180 : 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="text-gray-400 group-hover:text-gray-600"
+                                  >
+                                    ▼
+                                  </motion.span>
+                                  {room.building}
+                                </button>
+                              </td>
+                              <td className="px-6 py-4">{room.roomNumber}</td>
+                              <td className="px-6 py-4">{new Date(room.createdAt).toLocaleDateString()}</td>
+                              <td className="px-6 py-4">{new Date(room.updatedAt).toLocaleDateString()}</td>
+                              <td className="px-6 py-4">
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedRoom(room);
+                                      setShowEditModal(true);
+                                    }}
+                                    className="flex items-center gap-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                  >
+                                    <FiEdit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedRoom(room);
+                                      setShowDeleteModal(true);
+                                    }}
+                                    className="flex items-center gap-1 px-3 py-1 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                  >
+                                    <FiTrash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            <AnimatePresence>
+                              {expandedRows.has(room.id) && room.schedules.length > 0 && (
+                                <motion.tr
+                                  initial={{ opacity: 0, height: 0 }}
                                   animate={{ 
                                     opacity: 1, 
-                                    y: 0,
-                                    transition: { delay: 0.1 }
+                                    height: 'auto',
+                                    transition: { duration: 0.3 }
                                   }}
                                   exit={{ 
                                     opacity: 0, 
-                                    y: 20,
+                                    height: 0,
                                     transition: { duration: 0.2 }
                                   }}
-                                  className="pl-8 space-y-6"
+                                  className="bg-gray-50"
                                 >
-                                  <div className="flex flex-col">
-                                    <h4 className="font-semibold text-lg text-gray-700 mb-4">Scheduled Exams</h4>
-                                    
-                                    {/* Tabs */}
-                                    <div className="flex space-x-1 mb-4">
-                                      <button
-                                        onClick={() => handleTabChange(room.id, 'morning')}
-                                        className={`px-4 py-2 rounded-lg font-medium transition-all
-                                          ${(!roomTabs[room.id] || roomTabs[room.id] === 'morning')
-                                            ? 'bg-yellow-100 text-yellow-800 shadow-sm' 
-                                            : 'text-gray-600 hover:bg-gray-100'}`}
-                                      >
-                                        ช่วงเช้า 🌅
-                                      </button>
-                                      <button
-                                        onClick={() => handleTabChange(room.id, 'afternoon')}
-                                        className={`px-4 py-2 rounded-lg font-medium transition-all
-                                          ${roomTabs[room.id] === 'afternoon'
-                                            ? 'bg-blue-100 text-blue-800 shadow-sm' 
-                                            : 'text-gray-600 hover:bg-gray-100'}`}
-                                      >
-                                        ช่วงบ่าย 🌇
-                                      </button>
-                                    </div>
+                                  <td colSpan={5} className="p-2 sm:p-4">
+                                    <motion.div 
+                                      initial={{ opacity: 0, y: -20 }}
+                                      animate={{ 
+                                        opacity: 1, 
+                                        y: 0,
+                                        transition: { delay: 0.1 }
+                                      }}
+                                      exit={{ 
+                                        opacity: 0, 
+                                        y: 20,
+                                        transition: { duration: 0.2 }
+                                      }}
+                                      className="space-y-4"
+                                    >
+                                      <div className="flex flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                        {/* Header */}
+                                        <div className="p-3 sm:p-4 border-b border-gray-100">
+                                          <h4 className="font-semibold text-base sm:text-lg text-gray-700">ตารางสอบ</h4>
+                                        </div>
+                                        
+                                        {/* Tabs - Make sticky and responsive */}
+                                        <div className="flex space-x-1 p-2 sm:p-4 bg-gray-50 sticky top-0 z-20">
+                                          <button
+                                            onClick={() => handleTabChange(room.id, 'morning')}
+                                            className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base font-medium transition-all flex items-center gap-2
+                                              ${(!roomTabs[room.id] || roomTabs[room.id] === 'morning')
+                                                ? 'bg-yellow-100 text-yellow-800 shadow-sm' 
+                                                : 'text-gray-600 hover:bg-gray-100'}`}
+                                          >
+                                            <span>🌅</span>
+                                            <span className="hidden sm:inline">ช่วงเช้า</span>
+                                            <span className="sm:hidden">เช้า</span>
+                                          </button>
+                                          <button
+                                            onClick={() => handleTabChange(room.id, 'afternoon')}
+                                            className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base font-medium transition-all flex items-center gap-2
+                                              ${roomTabs[room.id] === 'afternoon'
+                                                ? 'bg-blue-100 text-blue-800 shadow-sm' 
+                                                : 'text-gray-600 hover:bg-gray-100'}`}
+                                          >
+                                            <span>🌇</span>
+                                            <span className="hidden sm:inline">ช่วงบ่าย</span>
+                                            <span className="sm:hidden">บ่าย</span>
+                                          </button>
+                                        </div>
 
-                                    <div className="relative min-h-[200px]">
-                                      <AnimatePresence mode="wait">
-                                        <motion.div
-                                          key={`${room.id}-${roomTabs[room.id] || 'morning'}`}
-                                          initial={{ opacity: 0, x: roomTabs[room.id] === 'afternoon' ? 20 : -20 }}
-                                          animate={{ opacity: 1, x: 0 }}
-                                          exit={{ opacity: 0, x: roomTabs[room.id] === 'afternoon' ? -20 : 20 }}
-                                          transition={{ duration: 0.2 }}
-                                          className="absolute inset-0"
-                                        >
-                                          <TabContent 
-                                            schedules={filterSchedulesByTimeSlot(
-                                              room.schedules, 
-                                              !roomTabs[room.id] || roomTabs[room.id] === 'morning'
-                                            )}
-                                            activeTab={roomTabs[room.id] || 'morning'}
-                                            isVisible={true}
-                                          />
-                                        </motion.div>
-                                      </AnimatePresence>
-                                    </div>
-                                  </div>
-                                </motion.div>
-                              </td>
-                            </motion.tr>
-                          )}
-                        </AnimatePresence>
-                      </React.Fragment>
-                    ))}
-                  </AnimatePresence>
-                </tbody>
-              </table>
-            </div>
-          )}
+                                        {/* Content Container - Adjust max-height based on screen size */}
+                                        <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+                                          <AnimatePresence mode="wait">
+                                            <motion.div
+                                              key={`${room.id}-${roomTabs[room.id] || 'morning'}`}
+                                              initial={{ opacity: 0 }}
+                                              animate={{ opacity: 1 }}
+                                              exit={{ opacity: 0 }}
+                                              transition={{ duration: 0.2 }}
+                                            >
+                                              <TabContent 
+                                                schedules={filterSchedulesByTimeSlot(
+                                                  room.schedules, 
+                                                  !roomTabs[room.id] || roomTabs[room.id] === 'morning'
+                                                )}
+                                                activeTab={roomTabs[room.id] || 'morning'}
+                                                isVisible={true}
+                                              />
+                                            </motion.div>
+                                          </AnimatePresence>
+                                        </div>
+                                      </div>
+                                    </motion.div>
+                                  </td>
+                                </motion.tr>
+                              )}
+                            </AnimatePresence>
+                          </React.Fragment>
+                        ))}
+                      </AnimatePresence>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

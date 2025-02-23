@@ -23,7 +23,7 @@ export async function GET() {
 // Update getDepartmentNameFromCode function to handle multiple codes
 async function getDepartmentNameFromCode(
   code: string,
-  prismaClient: Prisma.TransactionClient
+  tx: Prisma.TransactionClient
 ): Promise<string> {
   console.log(`Processing subject code: ${code}`);
 
@@ -92,7 +92,7 @@ async function getDepartmentNameFromCode(
   }
 
   // 4. ถ้าไม่พบในกรณีข้างต้น ค้นหาในฐานข้อมูล
-  const department = await prismaClient.department.findFirst({
+  const department = await tx.department.findFirst({
     where: {
       OR: [
         { code: code.substring(2, 4) }, // หลักที่ 3-4
@@ -122,12 +122,12 @@ async function getDepartmentNameFromCode(
 async function findOrCreateProfessors(
   names: string[], 
   department: { id: string, name: string },
-  prismaClient: Prisma.TransactionClient
+  tx: Prisma.TransactionClient
 ) {
   const professors = [];
 
   // Get existing professors first
-  const existingProfs = await prismaClient.professor.findMany({
+  const existingProfs = await tx.professor.findMany({
     where: { name: { in: names.map(n => n.trim()) } },
     include: { department: true }
   });
@@ -137,7 +137,7 @@ async function findOrCreateProfessors(
     const existingProf = existingProfs.find(p => p.name === trimmedName);
 
     // If professor exists but in different department, don't update department
-    const professor = await prismaClient.professor.upsert({
+    const professor = await tx.professor.upsert({
       where: { name: trimmedName },
       create: {
         name: trimmedName,
@@ -156,14 +156,14 @@ async function findOrCreateProfessors(
 async function upsertSubject(
   code: string, 
   name: string, 
-  prismaClient: Prisma.TransactionClient
+  tx: Prisma.TransactionClient
 ) {
-  const deptName = await getDepartmentNameFromCode(code, prismaClient);
-  const department = await prismaClient.department.findFirstOrThrow({
+  const deptName = await getDepartmentNameFromCode(code, tx);
+  const department = await tx.department.findFirstOrThrow({
     where: { name: deptName }
   });
 
-  const subject = await prismaClient.subject.upsert({
+  const subject = await tx.subject.upsert({
     where: { code },
     create: {
       code,
@@ -187,7 +187,7 @@ async function processExamData(
   examType: 'MIDTERM' | 'FINAL',
   academicYear: number,
   semester: 1 | 2,
-  prismaClient: Prisma.TransactionClient
+  tx: Prisma.TransactionClient
 ) {
   if (!Array.isArray(examData)) {
     throw new Error('Invalid exam data: expected array');
@@ -212,7 +212,7 @@ async function processExamData(
     const { subject, department } = await upsertSubject(
       trimmedSubjectCode, 
       subjectNameParts.join(' '),
-      prismaClient
+      tx
     );
 
     // Pass department to findOrCreateProfessors
@@ -220,10 +220,10 @@ async function processExamData(
     const professors = await findOrCreateProfessors(
       professorNames, 
       department, 
-      prismaClient
+      tx
     );
 
-    const room = await prismaClient.room.upsert({
+    const room = await tx.room.upsert({
       where: {
         building_roomNumber: {
           building: row.อาคาร.trim(),
@@ -237,7 +237,7 @@ async function processExamData(
       update: {}
     });
 
-    const subjectGroup = await prismaClient.subjectGroup.upsert({
+    const subjectGroup = await tx.subjectGroup.upsert({
       where: {
         subjectId_groupNumber_year: {
           subjectId: subject.id,
@@ -258,24 +258,22 @@ async function processExamData(
     });
 
     const [startTime, endTime] = row.เวลา.split(' - ');
-    const scheduleKey = `${examDate}_${scheduleOption}_${row.เวลา}_${row.อาคาร}_${row.ห้อง}_${subjectGroup.id}`;
     
-    // เช็คจำนวน schedules ที่มีอยู่แล้วในฐานข้อมูล
-    const existingSchedules = await prismaClient.schedule.count({
+    // เช็คว่ามีตารางสอบในห้องและเวลาเดียวกันหรือไม่
+    const existingSchedules = await tx.schedule.count({
       where: {
         date: examDate,
-        scheduleDateOption: scheduleOption.toUpperCase(),
-        examType,
-        academicYear,
-        semester,
         roomId: room.id,
-        subjectGroupId: subjectGroup.id
+        startTime: new Date(`1970-01-01T${startTime}`),
+        endTime: new Date(`1970-01-01T${endTime}`),
+        scheduleDateOption: scheduleOption.toUpperCase()
       }
     });
 
-    // ถ้ายังไม่มี schedule หรือมีน้อยกว่า 2 รายการ จึงจะสร้างใหม่
+    // อนุญาตให้มีได้ไม่เกิน 2 คนต่อห้อง
     if (existingSchedules < 2) {
       try {
+        const scheduleKey = `${room.id}_${startTime}_${endTime}_${examDate}`;
         const scheduleData = {
           date: examDate,
           scheduleDateOption: scheduleOption.toUpperCase(),
@@ -290,7 +288,7 @@ async function processExamData(
           invigilatorPosition: existingSchedules + 1
         };
 
-        await prismaClient.schedule.create({
+        await tx.schedule.create({
           data: scheduleData
         });
 
@@ -306,7 +304,7 @@ async function processExamData(
   // แก้ไขส่วนการเพิ่มแถวที่ขาด
   for (const row of examData) {
     // เช็คจำนวน schedules ที่มีอยู่แล้ว
-    const room = await prismaClient.room.findFirst({
+    const room = await tx.room.findFirst({
       where: {
         building: row.อาคาร.trim(),
         roomNumber: row.ห้อง.trim()
@@ -315,7 +313,7 @@ async function processExamData(
 
     if (!room) continue;
 
-    const existingSchedulesCount = await prismaClient.schedule.count({
+    const existingSchedulesCount = await tx.schedule.count({
       where: {
         date: examDate,
         scheduleDateOption: scheduleOption.toUpperCase(),
@@ -329,7 +327,7 @@ async function processExamData(
     // สร้างเพิ่มเติมเฉพาะถ้ามีน้อยกว่า 2 รายการ
     if (existingSchedulesCount < 2) {
       // Get room and subject group data first
-      const room = await prismaClient.room.findFirst({
+      const room = await tx.room.findFirst({
         where: {
           building: row.อาคาร.trim(),
           roomNumber: row.ห้อง.trim()
@@ -342,10 +340,10 @@ async function processExamData(
       const { subject } = await upsertSubject(
         subjectCode.trim(),
         '', // Name not needed for lookup
-        prismaClient
+        tx
       );
 
-      const subjectGroup = await prismaClient.subjectGroup.findFirst({
+      const subjectGroup = await tx.subjectGroup.findFirst({
         where: {
           subjectId: subject.id,
           groupNumber: row.กลุ่ม.trim(),
@@ -369,7 +367,7 @@ async function processExamData(
         semester
       };
 
-      await prismaClient.schedule.create({
+      await tx.schedule.create({
         data: scheduleData
       });
     }
@@ -406,13 +404,13 @@ function validateTransactionError(error: unknown): Error {
 }
 
 // Update seedDepartments to handle multiple codes
-async function seedDepartments(prismaClient: Prisma.TransactionClient) {
+async function seedDepartments(tx: Prisma.TransactionClient) {
   try {
     console.log('Starting department seeding...');
     
     for (const dept of departments) {
       console.log(`Seeding department: ${dept.name} (${dept.code})`);
-      await prismaClient.department.upsert({
+      await tx.department.upsert({
         where: { code: dept.code },
         create: {
           name: dept.name,
@@ -475,7 +473,7 @@ export async function POST(request: Request) {
       return { success: true, count: body.data.length };
     }, {
       maxWait: 10000, // 10s max wait
-      timeout: 30000, // 30s timeout
+      timeout: 1200000, // 30s timeout
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable
     });
 

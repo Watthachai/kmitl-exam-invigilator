@@ -68,19 +68,42 @@ export const TopNav = ({ onMenuClickAction }: TopNavProps) => {
   const fetchNotifications = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/appeals/my-appeals', {
-        credentials: 'include'
+      const response = await fetch('/api/appeals', {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include' // เพิ่ม credentials เพื่อส่ง cookie
       });
-      
+
+      // ตรวจสอบ response status
       if (!response.ok) {
-        throw new Error('Failed to fetch appeals');
+        if (response.status === 401) {
+          // ถ้ายังไม่ได้ login
+          return; // ไม่ต้องแสดง error 
+        }
+        // จัดการ error กรณีอื่นๆ
+        console.warn('Failed to fetch appeals:', response.status);
+        return;
       }
-      
+
+      // ตรวจสอบ content type
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.warn('Invalid response format');
+        return;
+      }
+
       const data = await response.json();
+      if (!Array.isArray(data)) {
+        console.warn('Invalid data format');
+        return;
+      }
+
       setNotifications(data);
       setUnreadCount(data.filter((n: AppealNotification) => !n.read).length);
     } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+      // จัดการ error ทั่วไป
+      console.warn('Error fetching appeals:', error);
     } finally {
       setIsLoading(false);
     }

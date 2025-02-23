@@ -147,28 +147,28 @@ model SubjectGroupProfessor {
 }
 
 model Schedule {
-  id                String      @id @default(cuid()) @map("ScheduleID")
-  date              DateTime
-  startTime         DateTime
-  endTime           DateTime
-  scheduleDateOption String
-  notes             String?     // เพิ่มฟิลด์ notes เป็น optional
-  room              Room       @relation(fields: [roomId], references: [id])
-  roomId            String
-  subjectGroup      SubjectGroup @relation(fields: [subjectGroupId], references: [id])
-  subjectGroupId    String
-  invigilator       Invigilator? @relation(fields: [invigilatorId], references: [id])
-  invigilatorId     String?
-  users             User[]
-  appeals           Appeal[]
-  examType          String    // 'MIDTERM' or 'FINAL'
-  academicYear      Int       // e.g. 2566
-  semester          Int       // 1 or 2
-  invigilatorPosition Int @default(1)
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @default(now())
+  id                  String       @id @default(cuid()) @map("ScheduleID")
+  date                DateTime
+  startTime           DateTime
+  endTime             DateTime
+  notes               String?
+  scheduleDateOption  String // 'MORNING' | 'AFTERNOON'
+  examType            String // 'MIDTERM' | 'FINAL'
+  academicYear        Int
+  semester            Int
+  invigilatorPosition Int?
+  room                Room         @relation(fields: [roomId], references: [id])
+  roomId              String
+  subjectGroup        SubjectGroup @relation(fields: [subjectGroupId], references: [id])
+  subjectGroupId      String
+  invigilator         Invigilator? @relation(fields: [invigilatorId], references: [id])
+  invigilatorId       String?
+  users               User[] // Add this for many-to-many relation with User
+  appeals             Appeal[] // Add this for one-to-many relation with Appeal
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
-  //@@unique([date, scheduleDateOption, startTime, endTime, roomId, subjectGroupId])
+  @@unique([date, roomId, startTime, endTime, invigilatorPosition])
   @@index([roomId])
   @@index([subjectGroupId])
   @@index([invigilatorId])
@@ -187,20 +187,20 @@ model Department {
 }
 
 model Appeal {
-  id             String   @id @default(cuid()) @map("AppealID")
-  user           User     @relation(fields: [userId], references: [id])
-  userId         String
-  schedule       Schedule @relation(fields: [scheduleId], references: [id])
-  scheduleId     String
-  type           String   // 'CHANGE_DATE' | 'FIND_REPLACEMENT'
-  reason         String
-  preferredDates DateTime[]
-  status         String   @default("PENDING") // 'PENDING' | 'APPROVED' | 'REJECTED'
+  id              String     @id @default(cuid()) @map("AppealID")
+  user            User       @relation(fields: [userId], references: [id])
+  userId          String
+  schedule        Schedule   @relation(fields: [scheduleId], references: [id])
+  scheduleId      String
+  type            String // 'CHANGE_DATE' | 'FIND_REPLACEMENT'
+  reason          String
+  preferredDates  DateTime[]
+  status          String     @default("PENDING") // 'PENDING' | 'APPROVED' | 'REJECTED'
   additionalNotes String?
-  adminResponse  String?
-  read           Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  adminResponse   String?
+  read            Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   @@index([userId])
   @@index([scheduleId])

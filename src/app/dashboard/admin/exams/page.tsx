@@ -67,6 +67,14 @@ interface Department {
   name: string;
 }
 
+interface ExtendedInvigilator extends Invigilator {
+  id: string;
+  name: string;
+  type: string;
+  assignedQuota: number;
+  quota: number;
+}
+
 type SortKey = keyof Schedule | 'subjectGroup.subject.department.name';
 
 export default function ExamsPage() {
@@ -77,7 +85,7 @@ export default function ExamsPage() {
   const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
   const [editSchedule, setEditSchedule] = useState<Schedule | null>(null);
   const [subjectGroups, setSubjectGroups] = useState([]);
-  const [invigilators, setInvigilators] = useState([]);
+  const [invigilators, setInvigilators] = useState<ExtendedInvigilator[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [formData, setFormData] = useState({
@@ -120,7 +128,23 @@ export default function ExamsPage() {
       setIsLoading(true);
       const response = await fetch('/api/schedules');
       const data = await response.json();
-      setSchedules(data);
+      
+      // เรียงลำดับข้อมูลก่อนเก็บใน state
+      const sortedData = data.sort((a: Schedule, b: Schedule) => {
+        const yearCompare = b.academicYear - a.academicYear;
+        if (yearCompare !== 0) return yearCompare;
+  
+        const semesterCompare = b.semester - a.semester;
+        if (semesterCompare !== 0) return semesterCompare;
+  
+        const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
+        if (dateCompare !== 0) return dateCompare;
+  
+        const timeSlotOrder = { MORNING: 1, AFTERNOON: 2 };
+        return timeSlotOrder[a.scheduleDateOption] - timeSlotOrder[b.scheduleDateOption];
+      });
+  
+      setSchedules(sortedData);
     } catch (error) {
       console.error('Failed to fetch exam schedules:', error);
       toast.error('ไม่สามารถโหลดข้อมูลตารางสอบได้');
@@ -129,15 +153,20 @@ export default function ExamsPage() {
     }
   };
 
+  // 3. ปรับปรุง useEffect สำหรับการโหลดข้อมูลครั้งแรก
   useEffect(() => {
-    const fetchFormData = async () => {
+    const fetchInitialData = async () => {
       try {
         const [subjectGroupsRes, invigilatorsRes] = await Promise.all([
           fetch('/api/subject-groups'),
-          fetch('/api/invigilators')
+          fetch('/api/invigilators', {
+            cache: 'no-store' // เพิ่มตรงนี้ด้วย
+          })
         ]);
+        
         const subjectGroups = await subjectGroupsRes.json();
         const invigilators = await invigilatorsRes.json();
+        
         setSubjectGroups(subjectGroups);
         setInvigilators(invigilators);
       } catch (error) {
@@ -145,7 +174,8 @@ export default function ExamsPage() {
         toast.error('Failed to fetch form data');
       }
     };
-    fetchFormData();
+    
+    fetchInitialData();
   }, []);
 
   useEffect(() => {
@@ -182,11 +212,19 @@ export default function ExamsPage() {
     fetchDepartments();
   }, []);
 
+  // 4. ปรับปรุง handleAddSchedule ด้วยเช่นกัน
   const handleAddSchedule = async () => {
     try {
       if (!formData.subjectGroupId || !formData.date || !formData.startTime || 
           !formData.endTime || !formData.roomId || !formData.invigilatorId) {
         toast.error('Please fill all required fields');
+        return;
+      }
+  
+      // ตรวจสอบโควต้าก่อนเพิ่มตารางสอบ
+      const invigilator = invigilators.find(inv => inv.id === formData.invigilatorId);
+      if (invigilator && invigilator.assignedQuota >= invigilator.quota) {
+        toast.error('ผู้คุมสอบท่านนี้มีโควต้าเต็มแล้ว');
         return;
       }
   
@@ -204,7 +242,12 @@ export default function ExamsPage() {
           startTime: startDateTime.toISOString(),
           endTime: endDateTime.toISOString(),
           roomId: formData.roomId,
-          invigilatorId: formData.invigilatorId
+          invigilatorId: formData.invigilatorId,
+          updateQuota: true, // เพิ่ม flag สำหรับอัพเดทโควต้า
+          examType: filters.examType || 'FINAL',
+          academicYear: parseInt(filters.academicYear) || new Date().getFullYear(),
+          semester: parseInt(filters.semester) || 1,
+          scheduleDateOption: startDateTime.getHours() < 12 ? 'MORNING' : 'AFTERNOON'
         }),
       });
   
@@ -224,65 +267,96 @@ export default function ExamsPage() {
         roomId: '',
         invigilatorId: ''
       });
-      fetchSchedules();
+      
+      // เรียก fetch ทั้งสองอันพร้อมกัน
+      await Promise.all([
+        fetchSchedules(),
+        fetchInvigilators() // เพิ่มการ fetch invigilators
+      ]);
     } catch (error) {
       console.error('Error adding schedule:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to add schedule');
     }
   };
 
+  // 2. เรียกใช้ฟังก์ชันนี้ในทุกครั้งที่มีการเปลี่ยนแปลงข้อมูล
   const handleEditSchedule = async () => {
     if (!editSchedule) return;
 
     try {
-      const response = await fetch(`/api/schedules/${editSchedule.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subjectGroupId: editSchedule.subjectGroup.id,
-          date: editSchedule.date,
-          startTime: editSchedule.startTime,
-          endTime: editSchedule.endTime,
-          roomId: editSchedule.room.id,
-          invigilatorId: editSchedule.invigilator?.id || ''
-        }),
-      });
+        // กรณีเปลี่ยนแปลงผู้คุมสอบ
+        if (editSchedule.invigilator?.id !== selectedSchedule?.invigilator?.id) {
+            // กรณีมีผู้คุมสอบคนใหม่
+            if (editSchedule.invigilator?.id) {
+                const newInvigilator = invigilators.find(inv => inv.id === editSchedule.invigilator?.id);
+                if (newInvigilator && newInvigilator.assignedQuota >= newInvigilator.quota) {
+                    toast.error('ผู้คุมสอบท่านนี้มีโควต้าเต็มแล้ว');
+                    return;
+                }
+            }
+        }
 
-      if (response.ok) {
-        toast.success('Exam schedule updated successfully');
-        setShowEditModal(false);
-        setEditSchedule(null);
-        fetchSchedules();
-      } else {
-        toast.error('Failed to update exam schedule');
-      }
+        const response = await fetch(`/api/schedules/${editSchedule.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subjectGroupId: editSchedule.subjectGroup.id,
+                date: editSchedule.date,
+                startTime: editSchedule.startTime,
+                endTime: editSchedule.endTime,
+                roomId: editSchedule.room.id,
+                invigilatorId: editSchedule.invigilator?.id || null,
+                previousInvigilatorId: selectedSchedule?.invigilator?.id,
+                updateQuota: true
+            }),
+        });
+
+        if (response.ok) {
+            toast.success('อัพเดตตารางสอบสำเร็จ');
+            setShowEditModal(false);
+            setEditSchedule(null);
+            await Promise.all([
+                fetchSchedules(),
+                fetchInvigilators()
+            ]);
+        } else {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to update exam schedule');
+        }
     } catch (error) {
-      console.error('Error updating exam schedule:', error);
-      toast.error('Failed to update exam schedule');
+        console.error('Error updating exam schedule:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to update exam schedule');
     }
-  };
+};
 
   const handleDeleteSchedule = async () => {
     if (!selectedSchedule) return;
 
     try {
-      const response = await fetch(`/api/schedules/${selectedSchedule.id}`, {
-        method: 'DELETE',
-      });
+        const response = await fetch(`/api/schedules/${selectedSchedule.id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                invigilatorId: selectedSchedule.invigilator?.id // ส่ง ID ของผู้คุมสอบไปด้วย
+            })
+        });
 
-      if (response.ok) {
-        toast.success('Exam schedule deleted successfully');
-        setShowDeleteModal(false);
-        setSelectedSchedule(null);
-        fetchSchedules();
-      } else {
-        toast.error('Failed to delete exam schedule');
-      }
+        if (response.ok) {
+            toast.success('ลบตารางสอบสำเร็จ');
+            setShowDeleteModal(false);
+            setSelectedSchedule(null);
+            await Promise.all([
+                fetchSchedules(),
+                fetchInvigilators() // เพิ่มการ fetch invigilators หลังลบ
+            ]);
+        } else {
+            toast.error('ไม่สามารถลบตารางสอบได้');
+        }
     } catch (error) {
-      console.error('Error deleting exam schedule:', error);
-      toast.error('Failed to delete exam schedule');
+        console.error('Error deleting exam schedule:', error);
+        toast.error('ไม่สามารถลบตารางสอบได้');
     }
-  };
+};
 
   const handleExportExcel = () => {
     try {
@@ -461,21 +535,41 @@ export default function ExamsPage() {
   });
 
   const sortedSchedules = [...filteredSchedules].sort((a, b) => {
-    if (sortConfig.key === 'date') {
-      return sortConfig.direction === 'asc' 
-        ? new Date(a.date).getTime() - new Date(b.date).getTime()
-        : new Date(b.date).getTime() - new Date(a.date).getTime();
-    }
-    if (sortConfig.key === 'subjectGroup.subject.department.name') {
-      const deptA = a.subjectGroup.subject.department.name;
-      const deptB = b.subjectGroup.subject.department.name;
-      return sortConfig.direction === 'asc'
-        ? deptA.localeCompare(deptB)
-        : deptB.localeCompare(deptA);
-    }
-    // เพิ่มการเรียงลำดับอื่นๆ ตามต้องการ
-    return 0;
+    // เรียงตามปีการศึกษา
+    const yearCompare = b.academicYear - a.academicYear;
+    if (yearCompare !== 0) return yearCompare;
+
+    // เรียงตามภาคการศึกษา
+    const semesterCompare = b.semester - a.semester;
+    if (semesterCompare !== 0) return semesterCompare;
+
+    // เรียงตามภาควิชา
+    const deptCompare = a.subjectGroup.subject.department.name.localeCompare(b.subjectGroup.subject.department.name);
+    if (deptCompare !== 0) return deptCompare;
+
+    // เรียงตามวันที่
+    const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (dateCompare !== 0) return dateCompare;
+
+    // เรียงตามช่วงเวลา
+    const timeSlotOrder = { MORNING: 1, AFTERNOON: 2 };
+    return timeSlotOrder[a.scheduleDateOption] - timeSlotOrder[b.scheduleDateOption];
   });
+
+  // 1. สร้างฟังก์ชันสำหรับ fetch invigilators โดยเฉพาะ
+  const fetchInvigilators = async () => {
+    try {
+      const response = await fetch('/api/invigilators', {
+        // เพิ่ม cache: 'no-store' เพื่อให้ได้ข้อมูลล่าสุดเสมอ
+        cache: 'no-store'
+      });
+      const data = await response.json();
+      setInvigilators(data);
+    } catch (error) {
+      console.error('Failed to fetch invigilators:', error);
+      toast.error('Failed to fetch invigilators data');
+    }
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -894,11 +988,11 @@ export default function ExamsPage() {
                       required
                     >
                       <option value="">เลือกผู้คุมสอบ</option>
-                      {invigilators.map((invigilator: Invigilator) => (
-                        <option key={invigilator.id} value={invigilator.id}>
-                          {invigilator.name}
-                        </option>
-                      ))}
+                      {invigilators.map((invigilator: ExtendedInvigilator) => (
+                      <option key={invigilator.id} value={invigilator.id}>
+                        {invigilator.name} (โควต้า: {invigilator.assignedQuota}/{invigilator.quota})
+                      </option>
+                    ))}
                     </select>
                   </div>
                 </div>
@@ -947,9 +1041,9 @@ export default function ExamsPage() {
                       required
                     >
                       <option value="">เลือกผู้คุมสอบ</option>
-                      {invigilators.map((invigilator: Invigilator) => (
+                      {invigilators.map((invigilator: ExtendedInvigilator) => (
                         <option key={invigilator.id} value={invigilator.id}>
-                          {invigilator.name}
+                          {invigilator.name} (โควต้า: {invigilator.assignedQuota}/{invigilator.quota})
                         </option>
                       ))}
                     </select>
