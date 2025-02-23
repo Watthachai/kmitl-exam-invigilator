@@ -1,5 +1,4 @@
-
-  export interface StatsData {
+export interface StatsData {
     clients: {
       total: number;
       percentage: number;
@@ -16,35 +15,20 @@
 
 
 export interface ProcessedData {
-
-  subject: {
-
-    code: string;
-
-    name: string;
-
-  };
-
-  room: {
-
-    building: string;
-
-    roomNumber: string;
-
-  };
-
-  professors: string[];
-
-  subjectGroup: {
-
-    groupNumber: string;
-
-    year: number;
-
-    studentCount: number;
-
-  };
-
+    subject: {
+      code: string;
+      name: string;
+    };
+    room: {
+      building: string;
+      roomNumber: string;
+    };
+    professors: string[];
+    subjectGroup: {
+      groupNumber: string;
+      year: number;
+      studentCount: number;
+    };
 }
 
 export interface TableRow {

@@ -147,23 +147,28 @@ model SubjectGroupProfessor {
 }
 
 model Schedule {
-  id                 String       @id @default(cuid()) @map("ScheduleID")
-  date               DateTime     @db.Date // Use @db.Date for date only
-  scheduleDateOption String // e.g. "MORNING", "AFTERNOON", "EVENING"
-  startTime          DateTime     @db.Time // Use @db.Time for time only
-  endTime            DateTime     @db.Time // Use @db.Time for time only
-  room               Room         @relation(fields: [roomId], references: [id])
-  roomId             String
-  subjectGroup       SubjectGroup @relation(fields: [subjectGroupId], references: [id])
-  subjectGroupId     String
-  invigilator        Invigilator? @relation(fields: [invigilatorId], references: [id])
-  invigilatorId      String?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
-  invigilators       User[] // Many-to-many relation with users
-  appeals            Appeal[] // Add this line for Appeal relation
+  id                String      @id @default(cuid()) @map("ScheduleID")
+  date              DateTime
+  startTime         DateTime
+  endTime           DateTime
+  scheduleDateOption String
+  notes             String?     // เพิ่มฟิลด์ notes เป็น optional
+  room              Room       @relation(fields: [roomId], references: [id])
+  roomId            String
+  subjectGroup      SubjectGroup @relation(fields: [subjectGroupId], references: [id])
+  subjectGroupId    String
+  invigilator       Invigilator? @relation(fields: [invigilatorId], references: [id])
+  invigilatorId     String?
+  users             User[]
+  appeals           Appeal[]
+  examType          String    // 'MIDTERM' or 'FINAL'
+  academicYear      Int       // e.g. 2566
+  semester          Int       // 1 or 2
+  invigilatorPosition Int @default(1)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @default(now())
 
-  @@unique([date, scheduleDateOption, startTime, endTime, roomId, subjectGroupId])
+  //@@unique([date, scheduleDateOption, startTime, endTime, roomId, subjectGroupId])
   @@index([roomId])
   @@index([subjectGroupId])
   @@index([invigilatorId])

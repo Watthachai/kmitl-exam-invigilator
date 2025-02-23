@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { FiEdit2, FiTrash2 } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiDownload } from 'react-icons/fi';
 import toast, { Toaster } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
 import { Invigilator } from "@prisma/client";
 import Highlight from '@/app/components/ui/highlight';
 import { ImSpinner8 } from 'react-icons/im';
 import { FiDatabase } from 'react-icons/fi';
+import { utils as XLSXUtils, write } from 'xlsx';
 
 interface SubjectGroup {
   id: string;
@@ -28,6 +29,10 @@ interface Schedule {
   startTime: Date;
   endTime: Date;
   notes?: string;
+  scheduleDateOption: 'MORNING' | 'AFTERNOON'; // เพิ่ม
+  examType: 'MIDTERM' | 'FINAL'; // เพิ่ม 
+  academicYear: number; // เพิ่ม
+  semester: 1 | 2; // เพิ่ม
   room: {
     id: string;
     building: string;
@@ -50,7 +55,7 @@ interface Schedule {
       };
     };
   };
-  invigilator?: {  // Make invigilator optional
+  invigilator?: {
     id: string;
     name: string;
     type?: string;
@@ -62,13 +67,7 @@ interface Department {
   name: string;
 }
 
-interface Professor {
-  id: string;
-  name: string;
-  department: {
-    name: string;
-  };
-}
+type SortKey = keyof Schedule | 'subjectGroup.subject.department.name';
 
 export default function ExamsPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -81,7 +80,6 @@ export default function ExamsPage() {
   const [invigilators, setInvigilators] = useState([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [professors, setProfessors] = useState<Professor[]>([]);
   const [formData, setFormData] = useState({
     subjectGroupId: '',
     date: '',
@@ -97,10 +95,21 @@ export default function ExamsPage() {
     department: '',
     professor: '',
     building: '',
-    searchQuery: ''
+    searchQuery: '',
+    examType: '', // MIDTERM/FINAL
+    academicYear: '',
+    semester: ''
   });
 
   const [isLoading, setIsLoading] = useState(true);
+
+  const [sortConfig, setSortConfig] = useState<{
+    key: SortKey;
+    direction: 'asc' | 'desc';
+  }>({
+    key: 'date',
+    direction: 'asc'
+  });
 
   useEffect(() => {
     fetchSchedules();
@@ -171,20 +180,6 @@ export default function ExamsPage() {
       }
     };
     fetchDepartments();
-  }, []);
-
-  useEffect(() => {
-    const fetchProfessors = async () => {
-      try {
-        const response = await fetch('/api/professors');
-        const data = await response.json();
-        setProfessors(data);
-      } catch (error) {
-        console.error('Failed to fetch professors:', error);
-        toast.error('Failed to fetch professors');
-      }
-    };
-    fetchProfessors();
   }, []);
 
   const handleAddSchedule = async () => {
@@ -289,47 +284,197 @@ export default function ExamsPage() {
     }
   };
 
+  const handleExportExcel = () => {
+    try {
+      // เรียงลำดับข้อมูลก่อนส่งออก
+      const sortedData = [...filteredSchedules].sort((a, b) => {
+        // เรียงตามภาควิชา
+        const deptCompare = a.subjectGroup.subject.department.name.localeCompare(b.subjectGroup.subject.department.name);
+        if (deptCompare !== 0) return deptCompare;
+        
+        // เรียงตามรหัสวิชา
+        const codeCompare = a.subjectGroup.subject.code.localeCompare(b.subjectGroup.subject.code);
+        if (codeCompare !== 0) return codeCompare;
+        
+        // เรียงตามกลุ่ม
+        const groupCompare = a.subjectGroup.groupNumber.localeCompare(b.subjectGroup.groupNumber);
+        if (groupCompare !== 0) return groupCompare;
+        
+        // เรียงตามวันที่
+        return new Date(a.date).getTime() - new Date(b.date).getTime();
+      });
+  
+      // สร้างข้อมูลสำหรับ Export
+      const exportData = sortedData.map(schedule => ({
+        'ภาควิชา': schedule.subjectGroup.subject.department.name,
+        'รหัสวิชา': schedule.subjectGroup.subject.code,
+        'ชื่อวิชา': schedule.subjectGroup.subject.name,
+        'กลุ่ม': schedule.subjectGroup.groupNumber,
+        'ชั้นปี': schedule.subjectGroup.year || '-',
+        'จำนวน นศ.': schedule.subjectGroup.studentCount || '-',
+        'วันที่': new Date(schedule.date).toLocaleDateString('th-TH'),
+        'ช่วงเวลา': schedule.scheduleDateOption === 'MORNING' ? 'ช่วงเช้า' : 'ช่วงบ่าย',
+        'เวลา': `${new Date(schedule.startTime).toLocaleTimeString('th-TH', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })} - ${new Date(schedule.endTime).toLocaleTimeString('th-TH', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })}`,
+        'อาคาร': schedule.room.building,
+        'ห้อง': schedule.room.roomNumber,
+        'ความจุห้อง': schedule.room.capacity || '-',
+        'อาจารย์ผู้สอน': schedule.subjectGroup.professor?.name || '-',
+        'ตำแหน่งผู้คุมสอบ': schedule.invigilator?.type || '-',
+        'ชื่อผู้คุมสอบ': schedule.invigilator?.name || '-',
+        'หมายเหตุ': schedule.notes || '-'
+      }));
+  
+      // สร้าง Workbook และ Worksheet
+      const wb = XLSXUtils.book_new();
+      const ws = XLSXUtils.json_to_sheet(exportData, { 
+        header: Object.keys(exportData[0]),
+      });
+
+      // เพิ่ม AutoFilter
+      ws['!autofilter'] = {
+        ref: `A1:P${exportData.length + 1}` // A1 ถึง P(จำนวนคอลัมน์) และจำนวนแถวทั้งหมด
+      };
+
+      // จัดการความกว้างคอลัมน์และรูปแบบ
+      const colWidths = [
+        { wch: 30 },  // ภาควิชา
+        { wch: 12 },  // รหัสวิชา
+        { wch: 40 },  // ชื่อวิชา
+        { wch: 8 },   // กลุ่ม
+        { wch: 8 },   // ชั้นปี
+        { wch: 12 },  // จำนวน นศ.
+        { wch: 15 },  // วันที่
+        { wch: 12 },  // ช่วงเวลา
+        { wch: 20 },  // เวลา
+        { wch: 15 },  // อาคาร
+        { wch: 10 },  // ห้อง
+        { wch: 12 },  // ความจุห้อง
+        { wch: 30 },  // อาจารย์ผู้สอน
+        { wch: 20 },  // ตำแหน่งผู้คุมสอบ
+        { wch: 30 },  // ชื่อผู้คุมสอบ
+        { wch: 30 }   // หมายเหตุ
+      ];
+      ws['!cols'] = colWidths;
+  
+      // จัดรูปแบบ Header
+      const range = XLSXUtils.decode_range(ws['!ref'] || 'A1');
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const address = XLSXUtils.encode_col(C) + '1';
+        if (!ws[address]) continue;
+        ws[address].s = {
+          font: { bold: true, color: { rgb: "000000" } },
+          fill: { fgColor: { rgb: "E0E0E0" } },
+          alignment: { horizontal: "center", vertical: "center" },
+          border: {
+            top: { style: 'thin', color: { rgb: "000000" } },
+            bottom: { style: 'thin', color: { rgb: "000000" } },
+            left: { style: 'thin', color: { rgb: "000000" } },
+            right: { style: 'thin', color: { rgb: "000000" } }
+          }
+        };
+      }
+  
+      // จัดรูปแบบเซลล์ข้อมูล
+      for (let R = 1; R <= exportData.length; R++) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const address = XLSXUtils.encode_cell({ r: R, c: C });
+          if (!ws[address]) continue;
+          ws[address].s = {
+            alignment: { vertical: "center" },
+            border: {
+              top: { style: 'thin', color: { rgb: "000000" } },
+              bottom: { style: 'thin', color: { rgb: "000000" } },
+              left: { style: 'thin', color: { rgb: "000000" } },
+              right: { style: 'thin', color: { rgb: "000000" } }
+            }
+          };
+        }
+      }
+  
+      // ตั้งค่าความสูงของแถว
+      ws['!rows'] = [{ hpt: 30 }]; // ความสูงของ header row
+  
+      // เพิ่ม Worksheet ลงใน Workbook
+      XLSXUtils.book_append_sheet(wb, ws, 'ตารางสอบ');
+  
+      // สร้างชื่อไฟล์
+      const fileName = `ตารางสอบ_${new Date().toLocaleDateString('th-TH')}.xlsx`;
+  
+      // แปลง workbook เป็น array buffer
+      const wbout = write(wb, {
+        bookType: 'xlsx',
+        type: 'array',
+        bookSST: false,
+        cellStyles: true,
+        compression: true
+      });
+  
+      // สร้าง Blob และดาวน์โหลด
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('ส่งออกข้อมูลสำเร็จ');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('เกิดข้อผิดพลาดในการส่งออกข้อมูล');
+    }
+  };
+
   // Update filter logic
   const filteredSchedules = schedules.filter(schedule => {
-    // Date filter
     const matchesDate = !filters.date || 
       new Date(schedule.date).toISOString().split('T')[0] === filters.date;
   
-    // Time slot filter
-    const matchesTimeSlot = !filters.timeSlot || (() => {
-      const startTime = new Date(schedule.startTime).toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        hour12: false 
-      });
-      
-      if (filters.timeSlot === 'MORNING') {
-        return startTime === '08:30';
-      }
-      if (filters.timeSlot === 'AFTERNOON') {
-        return startTime === '13:30';
-      }
-      return true;
-    })();
-  
-    // Add department filter
+    const matchesTimeSlot = !filters.timeSlot || schedule.scheduleDateOption === filters.timeSlot;
+    
     const matchesDepartment = !filters.department || 
       schedule.subjectGroup.subject.department.name === filters.department;
-
-    // Add professor filter
-    const matchesProfessor = !filters.professor || 
-      schedule.subjectGroup.professor.name === filters.professor;
-
-    // Search filter
+  
+    const matchesExamType = !filters.examType || schedule.examType === filters.examType;
+    
+    const matchesAcademicYear = !filters.academicYear || 
+      schedule.academicYear === parseInt(filters.academicYear);
+      
+    const matchesSemester = !filters.semester || 
+      schedule.semester === parseInt(filters.semester);
+  
     const searchQuery = filters.searchQuery.toLowerCase();
     const matchesSearch = !searchQuery || 
-      schedule.room.building.toLowerCase().includes(searchQuery) ||
-      schedule.room.roomNumber.toLowerCase().includes(searchQuery) ||
-      `${schedule.room.building} ${schedule.room.roomNumber}`.toLowerCase().includes(searchQuery) ||
       schedule.subjectGroup.subject.code.toLowerCase().includes(searchQuery) ||
-      schedule.subjectGroup.subject.name.toLowerCase().includes(searchQuery);
+      schedule.subjectGroup.subject.name.toLowerCase().includes(searchQuery) ||
+      schedule.room.building.toLowerCase().includes(searchQuery) ||
+      schedule.room.roomNumber.toLowerCase().includes(searchQuery);
   
-    return matchesDate && matchesTimeSlot && matchesDepartment && matchesSearch && matchesProfessor;
+    return matchesDate && matchesTimeSlot && matchesDepartment && 
+           matchesExamType && matchesAcademicYear && matchesSemester && matchesSearch;
+  });
+
+  const sortedSchedules = [...filteredSchedules].sort((a, b) => {
+    if (sortConfig.key === 'date') {
+      return sortConfig.direction === 'asc' 
+        ? new Date(a.date).getTime() - new Date(b.date).getTime()
+        : new Date(b.date).getTime() - new Date(a.date).getTime();
+    }
+    if (sortConfig.key === 'subjectGroup.subject.department.name') {
+      const deptA = a.subjectGroup.subject.department.name;
+      const deptB = b.subjectGroup.subject.department.name;
+      return sortConfig.direction === 'asc'
+        ? deptA.localeCompare(deptB)
+        : deptB.localeCompare(deptA);
+    }
+    // เพิ่มการเรียงลำดับอื่นๆ ตามต้องการ
+    return 0;
   });
 
   return (
@@ -339,146 +484,197 @@ export default function ExamsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">ตารางสอบ</h1>
-        <button 
-          className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-          onClick={() => setShowAddModal(true)}
-        >
-          เพิ่มตารางสอบ
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={handleExportExcel}
+            className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <FiDownload className="w-4 h-4" />
+              ส่งออกเป็น Excel
+            </span>
+          </button>
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+          >
+            เพิ่มตารางสอบ
+          </button>
+        </div>
       </div>
 
       {/* Filters Section */}
       <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100 p-6">
-        <div className="grid grid-cols-6 gap-4"> {/* Changed from md:grid-cols-4 to grid-cols-6 */}
-          {/* Date Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1"> {/* Reduced mb-2 to mb-1 */}
-              วันที่สอบ
-            </label>
-            <input
-              type="date"
-              value={filters.date}
-              onChange={(e) => setFilters({ ...filters, date: e.target.value })}
-              className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+  {/* Filter Groups */}
+  <div className="space-y-4">
+    {/* Filter Row 1 - Main Filters */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {/* Academic Year Filter */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          ปีการศึกษา
+        </label>
+        <select
+          value={filters.academicYear}
+          onChange={(e) => setFilters({ ...filters, academicYear: e.target.value })}
+          className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
+        >
+          <option value="">ทุกปีการศึกษา</option>
+          {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() + 543 - i).map(year => (
+            <option key={year} value={year}>{year}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Exam Type Filter */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          ประเภทการสอบ
+        </label>
+        <select
+          value={filters.examType}
+          onChange={(e) => setFilters({ ...filters, examType: e.target.value })}
+          className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
+        >
+          <option value="">ทั้งหมด</option>
+          <option value="MIDTERM">สอบกลางภาค</option>
+          <option value="FINAL">สอบปลายภาค</option>
+        </select>
+      </div>
+
+      {/* Semester Filter */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          ภาคการศึกษา
+        </label>
+        <select
+          value={filters.semester}
+          onChange={(e) => setFilters({ ...filters, semester: e.target.value })}
+          className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
+        >
+          <option value="">ทั้งหมด</option>
+          <option value="1">ภาคการศึกษาที่ 1</option>
+          <option value="2">ภาคการศึกษาที่ 2</option>
+        </select>
+      </div>
+
+      {/* Department Filter */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          ภาควิชา
+        </label>
+        <select
+          value={filters.department}
+          onChange={(e) => setFilters({ ...filters, department: e.target.value })}
+          className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
+        >
+          <option value="">ทุกภาควิชา</option>
+          {departments.map((dept) => (
+            <option key={dept.id} value={dept.name}>
+              {dept.name}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+
+    {/* Filter Row 2 - Secondary Filters */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {/* Date Filter */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          วันที่สอบ
+        </label>
+        <input
+          type="date"
+          value={filters.date}
+          onChange={(e) => setFilters({ ...filters, date: e.target.value })}
+          className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+        />
+      </div>
+
+      {/* Time Slot Filter */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          ช่วงเวลา
+        </label>
+        <select
+          value={filters.timeSlot}
+          onChange={(e) => setFilters({ ...filters, timeSlot: e.target.value })}
+          className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
+        >
+          <option value="">ทุกช่วงเวลา</option>
+          <option value="MORNING">ช่วงเช้า</option>
+          <option value="AFTERNOON">ช่วงบ่าย</option>
+        </select>
+      </div>
+
+      {/* Search Filter */}
+      <div className="md:col-span-2">
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          ค้นหา
+        </label>
+        <div className="relative">
+          <input
+            type="text"
+            value={filters.searchQuery}
+            onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
+            placeholder="ค้นหารหัสวิชา, ชื่อวิชา, ห้อง..."
+            className="w-full px-8 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+          />
+          <svg
+            className="absolute left-2 top-2 h-4 w-4 text-gray-400"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
             />
-          </div>
-
-          {/* Time Slot Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              ช่วงเวลา
-            </label>
-            <select
-              value={filters.timeSlot}
-              onChange={(e) => setFilters({ ...filters, timeSlot: e.target.value })}
-              className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
-            >
-              <option value="">ทุกช่วงเวลา</option>
-              <option value="MORNING">ช่วงเช้า</option>
-              <option value="AFTERNOON">ช่วงบ่าย</option>
-            </select>
-          </div>
-
-          {/* Department Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              ภาควิชา
-            </label>
-            <select
-              value={filters.department}
-              onChange={(e) => setFilters({ ...filters, department: e.target.value })}
-              className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
-            >
-              <option value="">ทุกภาควิชา</option>
-              {departments.map((dept) => (
-                <option key={dept.id} value={dept.name}>
-                  {dept.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Professor Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              อาจารย์ผู้สอน
-            </label>
-            <select
-              value={filters.professor}
-              onChange={(e) => setFilters({ ...filters, professor: e.target.value })}
-              className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
-            >
-              <option value="">ทุกอาจารย์</option>
-              {professors.map((prof) => (
-                <option key={prof.id} value={prof.name}>
-                  {prof.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Search Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              ค้นหา
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={filters.searchQuery}
-                onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
-                placeholder="ค้นหา..."
-                className="w-full px-8 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
-              />
-              <svg
-                className="absolute left-2 top-2 h-4 w-4 text-gray-400"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </div>
-          </div>
-
-          {/* Clear Filters Button */}
-          <div className="flex items-end">
-            <button
-              onClick={() => setFilters({
-                date: '',
-                timeSlot: '',
-                department: '',
-                professor: '',
-                building: '',
-                searchQuery: ''
-              })}
-              className="w-full px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all flex items-center justify-center gap-1 text-sm"
-            >
-              <svg
-                className="h-4 w-4"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-              ล้างตัวกรอง
-            </button>
-          </div>
+          </svg>
         </div>
       </div>
+    </div>
+
+    {/* Filter Actions */}
+    <div className="flex justify-end gap-2">
+      <button
+        onClick={() => setFilters({
+          date: '',
+          timeSlot: '',
+          department: '',
+          professor: '',
+          building: '',
+          searchQuery: '',
+          examType: '',
+          academicYear: '',
+          semester: ''
+        })}
+        className="px-4 py-1.5 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg transition-all flex items-center gap-2"
+      >
+        <svg
+          className="h-4 w-4"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M6 18L18 6M6 6l12 12"
+          />
+        </svg>
+        ล้างตัวกรอง
+      </button>
+    </div>
+  </div>
+</div>
 
       {/* Table Container */}
       <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100">
@@ -490,7 +686,7 @@ export default function ExamsPage() {
                 <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
               </div>
             </div>
-          ) : filteredSchedules.length === 0 ? (
+          ) : sortedSchedules.length === 0 ? (
             <div className="h-full flex items-center justify-center">
               <div className="flex flex-col items-center gap-3">
                 <FiDatabase className="w-16 h-16 text-gray-300" />
@@ -508,7 +704,17 @@ export default function ExamsPage() {
               <table className="w-full border-collapse">
                 <thead className="bg-white/95 backdrop-blur-sm">
                   <tr className="border-b border-gray-100">
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">วันที่</th>
+                    <th 
+                      onClick={() => setSortConfig({
+                        key: 'date',
+                        direction: sortConfig.direction === 'asc' ? 'desc' : 'asc'
+                      })}
+                      className="px-6 py-4 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-50"
+                    >
+                      วันที่ {sortConfig.key === 'date' && (
+                        <span>{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">เวลา</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">วิชา</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">กลุ่มเรียน</th>
@@ -527,7 +733,7 @@ export default function ExamsPage() {
                 </thead>
                 {/* Update table body rendering with null checks */}
                 <tbody className="divide-y divide-gray-100">
-                  {filteredSchedules.map((schedule) => (
+                  {sortedSchedules.map((schedule) => (
                     <tr key={schedule.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         {new Date(schedule.date).toLocaleDateString('th-TH')}
@@ -563,7 +769,9 @@ export default function ExamsPage() {
                       <td className="px-6 py-4">
                         {schedule.invigilator?.name || '-'}
                       </td>
-                      <td className="px-6 py-4">{schedule.notes || '-'}</td>
+                      <td className="px-6 py-4">
+                        {schedule.notes || '-'}
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex justify-end gap-2">
                           <button

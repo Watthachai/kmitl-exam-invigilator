@@ -118,6 +118,9 @@ export default function TablePage() {
   const [lastUploadedFile, setLastUploadedFile] = useState('');
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [examType, setExamType] = useState<'MIDTERM' | 'FINAL' | null>(null);
+  const [academicYear, setAcademicYear] = useState<number | null>(null);
+  const [semester, setSemester] = useState<1 | 2 | null>(null);
   const BATCH_SIZE = 50;
 
   const logQueue = useRef<string[]>([]);
@@ -307,10 +310,40 @@ const confirmSaveToDatabase = async () => {
     setImportProgress(0);
     addLog('🚀 Starting import process...');
 
+    // เพิ่มการตรวจสอบและเพิ่มห้องที่ขาด
+    const roomCount: Record<string, number> = {};
+    const systemGeneratedRows: TableData[] = [];
+    
     const dataToSave = isEditing ? editedData : tableData;
-    const batches = chunk(dataToSave, BATCH_SIZE);
+    
+    // ตรวจสอบห้องที่มีแค่ห้องเดียว
+    dataToSave.forEach(row => {
+      const room = row["ห้อง"]?.toString();
+      if (room) {
+        roomCount[room] = (roomCount[room] || 0) + 1;
+      }
+    });
+
+    // สร้างแถวใหม่สำหรับห้องที่ขาด
+    Object.entries(roomCount).forEach(([room, count]) => {
+      if (count < 2) {
+        const existingRow = dataToSave.find(row => row["ห้อง"]?.toString() === room);
+        if (existingRow) {
+          const existingNote = existingRow["หมายเหตุ"]?.toString() || '';
+          systemGeneratedRows.push({
+            ...existingRow,
+            "หมายเหตุ": existingNote ? `${existingNote}, เพิ่มแถวโดยระบบ` : "เพิ่มแถวโดยระบบ"
+          });
+        }
+      }
+    });
+
+    // รวมข้อมูลทั้งหมด
+    const allData = [...dataToSave, ...systemGeneratedRows];
+    const batches = chunk(allData, BATCH_SIZE);
     const results: ImportResult[] = [];
     
+    // ดำเนินการ import ตามปกติ
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
       const currentBatch = i + 1;
@@ -325,7 +358,10 @@ const confirmSaveToDatabase = async () => {
           body: JSON.stringify({
             data: batch,
             scheduleOption: scheduleDateOption,
-            examDate: selectedDate?.toISOString()
+            examDate: selectedDate?.toISOString(),
+            examType,
+            academicYear,
+            semester
           }),
         });
 
@@ -411,6 +447,9 @@ const handleClearFile = useCallback(() => {
 const cancelSaveToDatabase = () => {
     setShowDatePrompt(false);
     setScheduleDateOption(null);
+    setExamType('MIDTERM');
+    setAcademicYear(new Date().getFullYear() + 543);
+    setSemester(1);
   };
 
   // Update addMissingRoomEntries function to group rows
@@ -716,7 +755,77 @@ const addMissingRoomEntries = () => {
 
                 <h2 className="text-lg font-bold">เลือกตัวเลือกตารางสอบ</h2>
                 
-                {/* Date Picker */}
+                {/* Exam Type */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    ประเภทการสอบ
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        value="MIDTERM"
+                        checked={examType === 'MIDTERM'}
+                        onChange={(e) => setExamType(e.target.value as 'MIDTERM' | 'FINAL')}
+                      />
+                      <span>สอบกลางภาค</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        value="FINAL"
+                        checked={examType === 'FINAL'}
+                        onChange={(e) => setExamType(e.target.value as 'MIDTERM' | 'FINAL')}
+                      />
+                      <span>สอบปลายภาค</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Academic Year */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    ปีการศึกษา
+                  </label>
+                  <input
+                    type="number"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    value={academicYear ?? ''}
+                    onChange={(e) => setAcademicYear(parseInt(e.target.value))}
+                    min="2500"
+                    max="2599"
+                    required
+                  />
+                </div>
+
+                {/* Semester */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    ภาคการศึกษา
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        value="1"
+                        checked={semester === 1}
+                        onChange={(e) => setSemester(parseInt(e.target.value) as 1 | 2)}
+                      />
+                      <span>ภาคการศึกษาที่ 1</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        value="2"
+                        checked={semester === 2}
+                        onChange={(e) => setSemester(parseInt(e.target.value) as 1 | 2)}
+                      />
+                      <span>ภาคการศึกษาที่ 2</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Existing Date and Time Options */}
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700">
                     เลือกวันที่
@@ -767,7 +876,7 @@ const addMissingRoomEntries = () => {
                   </button>
                   <button
                     onClick={confirmSaveToDatabase}
-                    disabled={!selectedDate || !scheduleDateOption}
+                    disabled={!selectedDate || !scheduleDateOption || !examType || !academicYear || !semester}
                     className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-blue-300"
                   >
                     ยืนยัน
