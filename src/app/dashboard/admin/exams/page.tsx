@@ -29,7 +29,7 @@ interface Schedule {
   startTime: Date;
   endTime: Date;
   notes?: string;
-  scheduleDateOption: 'MORNING' | 'AFTERNOON'; // เพิ่ม
+  scheduleDateOption: 'ช่วงเช้า' | 'ช่วงบ่าย'; // เพิ่ม
   examType: 'MIDTERM' | 'FINAL'; // เพิ่ม 
   academicYear: number; // เพิ่ม
   semester: 1 | 2; // เพิ่ม
@@ -140,7 +140,7 @@ export default function ExamsPage() {
         const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
         if (dateCompare !== 0) return dateCompare;
   
-        const timeSlotOrder = { MORNING: 1, AFTERNOON: 2 };
+        const timeSlotOrder = { 'ช่วงเช้า': 1, 'ช่วงบ่าย': 2 };
         return timeSlotOrder[a.scheduleDateOption] - timeSlotOrder[b.scheduleDateOption];
       });
   
@@ -233,6 +233,10 @@ export default function ExamsPage() {
       const startDateTime = new Date(`${dateOnly}T${formData.startTime}:00`);
       const endDateTime = new Date(`${dateOnly}T${formData.endTime}:00`);
   
+      // ปรับปรุงการกำหนดช่วงเวลา
+      const startHour = parseInt(formData.startTime.split(':')[0]);
+      const scheduleDateOption = startHour < 12 ? 'ช่วงเช้า' : 'ช่วงบ่าย';
+
       const response = await fetch('/api/schedules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -247,7 +251,7 @@ export default function ExamsPage() {
           examType: filters.examType || 'FINAL',
           academicYear: parseInt(filters.academicYear) || new Date().getFullYear(),
           semester: parseInt(filters.semester) || 1,
-          scheduleDateOption: startDateTime.getHours() < 12 ? 'MORNING' : 'AFTERNOON'
+          scheduleDateOption: scheduleDateOption // ใช้ค่าที่คำนวณใหม่
         }),
       });
   
@@ -393,7 +397,7 @@ export default function ExamsPage() {
         'ชั้นปี': schedule.subjectGroup.year || '-',
         'จำนวน นศ.': schedule.subjectGroup.studentCount || '-',
         'วันที่': new Date(schedule.date).toLocaleDateString('th-TH'),
-        'ช่วงเวลา': schedule.scheduleDateOption === 'MORNING' ? 'ช่วงเช้า' : 'ช่วงบ่าย',
+        'ช่วงเวลา': schedule.scheduleDateOption === 'ช่วงเช้า' ? 'ช่วงเช้า' : 'ช่วงบ่าย',
         'เวลา': `${new Date(schedule.startTime).toLocaleTimeString('th-TH', {
           hour: '2-digit',
           minute: '2-digit'
@@ -516,7 +520,8 @@ export default function ExamsPage() {
     const matchesDate = !filters.date || 
       new Date(schedule.date).toISOString().split('T')[0] === filters.date;
   
-    const matchesTimeSlot = !filters.timeSlot || schedule.scheduleDateOption === filters.timeSlot;
+    const matchesTimeSlot = !filters.timeSlot || 
+      (filters.timeSlot === schedule.scheduleDateOption);  // แก้ไขตรงนี้
     
     const matchesDepartment = !filters.department || 
       schedule.subjectGroup.subject.department.name === filters.department;
@@ -558,7 +563,7 @@ export default function ExamsPage() {
     if (dateCompare !== 0) return dateCompare;
 
     // เรียงตามช่วงเวลา
-    const timeSlotOrder = { MORNING: 1, AFTERNOON: 2 };
+    const timeSlotOrder = { 'ช่วงเช้า': 1, 'ช่วงบ่าย': 2 };
     return timeSlotOrder[a.scheduleDateOption] - timeSlotOrder[b.scheduleDateOption];
   });
 
@@ -704,8 +709,8 @@ export default function ExamsPage() {
           className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
         >
           <option value="">ทุกช่วงเวลา</option>
-          <option value="MORNING">ช่วงเช้า</option>
-          <option value="AFTERNOON">ช่วงบ่าย</option>
+          <option value="ช่วงเช้า">ช่วงเช้า</option>
+          <option value="ช่วงบ่าย">ช่วงบ่าย</option>
         </select>
       </div>
 

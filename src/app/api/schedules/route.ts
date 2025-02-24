@@ -17,19 +17,27 @@ export async function GET() {
         },
         room: true,
         invigilator: true
-      }
+      },
+      where: {
+        // เพิ่มเงื่อนไขถ้าต้องการ
+      },
+      orderBy: [
+        { date: 'asc' },
+        { scheduleDateOption: 'asc' } // เพิ่มการเรียงลำดับตามช่วงเวลา
+      ]
     });
     
-    return Response.json(schedules);
+    return NextResponse.json(schedules);
   } catch (error) {
     console.error('Error fetching schedules:', error);
-    return Response.json({ error: 'Failed to fetch schedules' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch schedules' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const { scheduleDateOption, ...otherData } = body;
 
     // Validate required fields
     if (!body?.subjectGroupId || !body?.date || !body?.startTime || 
@@ -54,16 +62,8 @@ export async function POST(request: Request) {
 
       const schedule = await prismaClient.schedule.create({
         data: {
-          date: new Date(body.date),
-          startTime: new Date(body.startTime),
-          endTime: new Date(body.endTime),
-          scheduleDateOption: body.scheduleDateOption,
-          examType: body.examType,
-          academicYear: body.academicYear,
-          semester: body.semester,
-          subjectGroup: { connect: { id: body.subjectGroupId } },
-          room: { connect: { id: body.roomId } },
-          invigilator: { connect: { id: body.invigilatorId } }
+          ...otherData,
+          scheduleDateOption: scheduleDateOption, // ตรวจสอบว่ามีการส่งค่านี้มาด้วย
         },
         include: {
           subjectGroup: {

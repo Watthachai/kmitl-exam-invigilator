@@ -16,26 +16,27 @@ export async function GET() {
             invigilator: true
           }
         }
-      },
-      orderBy: {
-        building: 'asc'
       }
     });
 
-    if (!rooms) {
-      return NextResponse.json({ error: 'No rooms found' }, { status: 404 });
-    }
+    // Log schedules time for debugging
+    rooms.forEach(room => {
+      console.log(`Room ${room.roomNumber} schedules:`, 
+        room.schedules.map(s => ({
+          id: s.id,
+          startTime: new Date(s.startTime).toLocaleTimeString(),
+          hour: new Date(s.startTime).getHours()
+        }))
+      );
+    });
 
     return NextResponse.json({ data: rooms });
-
   } catch (error) {
-    console.error('Error fetching rooms:', error);
-    return NextResponse.json({ 
-      error: 'Failed to fetch rooms',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { 
-      status: 500 
-    });
+    console.error('Failed to fetch rooms:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch rooms' },
+      { status: 500 }
+    );
   }
 }
 

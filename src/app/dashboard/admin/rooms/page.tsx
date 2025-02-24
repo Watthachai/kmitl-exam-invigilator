@@ -39,12 +39,18 @@ interface Room {
 
 interface TabContentProps {
   schedules: Schedule[];
-  activeTab: 'morning' | 'afternoon';
+  activeTab: 'ช่วงเช้า' | 'ช่วงบ่าย';
   isVisible: boolean;
 }
 
-// แก้ไข TabContent component
+// แก้ไข TabContent component เพื่อแสดง debug info
 const TabContent: React.FC<TabContentProps> = ({ schedules, activeTab, isVisible }) => {
+  console.log('TabContent props:', {
+    schedulesCount: schedules.length,
+    activeTab,
+    isVisible
+  });
+  
   return (
     <AnimatePresence mode="wait">
       {isVisible && (
@@ -83,12 +89,12 @@ const TabContent: React.FC<TabContentProps> = ({ schedules, activeTab, isVisible
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
                       className={`rounded-lg border p-4 transition-all hover:shadow-md
-                        ${activeTab === 'morning' ? 'bg-yellow-50/70' : 'bg-blue-50/70'}`}
+                        ${activeTab === 'ช่วงเช้า' ? 'bg-yellow-50/70' : 'bg-blue-50/70'}`}
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                           <span className={`px-3 py-1.5 rounded-full bg-white border text-sm whitespace-nowrap ${
-                            activeTab === 'morning' ? 'text-yellow-600 border-yellow-200' : 'text-blue-600 border-blue-200'
+                            activeTab === 'ช่วงเช้า' ? 'text-yellow-600 border-yellow-200' : 'text-blue-600 border-blue-200'
                           }`}>
                             {new Date(schedule.startTime).toLocaleTimeString('th-TH', {
                               hour: '2-digit',
@@ -139,7 +145,7 @@ export default function RoomsPage() {
     roomNumber: ''
   });
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [roomTabs, setRoomTabs] = useState<Record<string, 'morning' | 'afternoon'>>({});
+  const [roomTabs, setRoomTabs] = useState<Record<string, 'ช่วงเช้า' | 'ช่วงบ่าย'>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -250,13 +256,24 @@ export default function RoomsPage() {
   };
 
   const filterSchedulesByTimeSlot = (schedules: Schedule[], isMorning: boolean) => {
+    console.log('Filtering schedules:', schedules.map(s => ({
+      id: s.id,
+      startTime: new Date(s.startTime).toLocaleTimeString(),
+      hour: new Date(s.startTime).getHours()
+    })));
+    
     return schedules.filter(schedule => {
-      const hour = new Date(schedule.startTime).getHours();
-      return isMorning ? hour < 12 : hour >= 12;
+      const startHour = new Date(schedule.startTime).getHours();
+      // ปรับเงื่อนไขการแยกช่วงเวลา
+      if (isMorning) {
+        return startHour < 12;
+      } else {
+        return startHour >= 12;
+      }
     });
   };
 
-  const handleTabChange = (roomId: string, tab: 'morning' | 'afternoon') => {
+  const handleTabChange = (roomId: string, tab: 'ช่วงเช้า' | 'ช่วงบ่าย') => {
     setRoomTabs(prev => ({
       ...prev,
       [roomId]: tab
@@ -402,9 +419,9 @@ export default function RoomsPage() {
                                         {/* Tabs - Make sticky and responsive */}
                                         <div className="flex space-x-1 p-2 sm:p-4 bg-gray-50 sticky top-0 z-20">
                                           <button
-                                            onClick={() => handleTabChange(room.id, 'morning')}
+                                            onClick={() => handleTabChange(room.id, 'ช่วงเช้า')}
                                             className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base font-medium transition-all flex items-center gap-2
-                                              ${(!roomTabs[room.id] || roomTabs[room.id] === 'morning')
+                                              ${(!roomTabs[room.id] || roomTabs[room.id] === 'ช่วงเช้า')
                                                 ? 'bg-yellow-100 text-yellow-800 shadow-sm' 
                                                 : 'text-gray-600 hover:bg-gray-100'}`}
                                           >
@@ -413,9 +430,9 @@ export default function RoomsPage() {
                                             <span className="sm:hidden">เช้า</span>
                                           </button>
                                           <button
-                                            onClick={() => handleTabChange(room.id, 'afternoon')}
+                                            onClick={() => handleTabChange(room.id, 'ช่วงบ่าย')}
                                             className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base font-medium transition-all flex items-center gap-2
-                                              ${roomTabs[room.id] === 'afternoon'
+                                              ${roomTabs[room.id] === 'ช่วงบ่าย'
                                                 ? 'bg-blue-100 text-blue-800 shadow-sm' 
                                                 : 'text-gray-600 hover:bg-gray-100'}`}
                                           >
@@ -429,7 +446,7 @@ export default function RoomsPage() {
                                         <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
                                           <AnimatePresence mode="wait">
                                             <motion.div
-                                              key={`${room.id}-${roomTabs[room.id] || 'morning'}`}
+                                              key={`${room.id}-${roomTabs[room.id] || 'ช่วงเช้า'}`}
                                               initial={{ opacity: 0 }}
                                               animate={{ opacity: 1 }}
                                               exit={{ opacity: 0 }}
@@ -438,9 +455,9 @@ export default function RoomsPage() {
                                               <TabContent 
                                                 schedules={filterSchedulesByTimeSlot(
                                                   room.schedules, 
-                                                  !roomTabs[room.id] || roomTabs[room.id] === 'morning'
+                                                  roomTabs[room.id] === 'ช่วงเช้า' || !roomTabs[room.id]
                                                 )}
-                                                activeTab={roomTabs[room.id] || 'morning'}
+                                                activeTab={roomTabs[room.id] || 'ช่วงเช้า'}
                                                 isVisible={true}
                                               />
                                             </motion.div>
