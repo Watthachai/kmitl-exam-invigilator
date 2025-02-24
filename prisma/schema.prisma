@@ -165,6 +165,11 @@ model Schedule {
   invigilatorId       String?
   users               User[] // Add this for many-to-many relation with User
   appeals             Appeal[] // Add this for one-to-many relation with Appeal
+  priority            Boolean    @default(false)  // สำหรับมาร์คว่าเป็นวิชาของภาควิชานั้นๆ
+  isGenEd             Boolean    @default(false)  // สำหรับมาร์คว่าเป็นวิชา GenEd
+  quotaFilled         Boolean    @default(false)  // สถานะว่าโควต้าเต็มหรือยัง
+  departmentQuota     Int        @default(0)      // จำนวนโควต้าที่จัดสรรให้แต่ละภาค
+  staffPreferred      Boolean    @default(false)  // เพิ่มฟิลด์ใหม่
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -182,6 +187,8 @@ model Department {
   subjects     Subject[]
   professors   Professor[]
   invigilators Invigilator[]
+  quota        Int           @default(0)      // โควต้ารวมของภาควิชา
+  usedQuota    Int           @default(0)      // โควต้าที่ใช้ไปแล้ว
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
