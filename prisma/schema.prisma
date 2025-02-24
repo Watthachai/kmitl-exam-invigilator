@@ -79,6 +79,7 @@ model Subject {
   subjectGroups SubjectGroup[]
   department    Department     @relation(fields: [departmentId], references: [id])
   departmentId  String
+  isGenEd       Boolean       @default(false)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }

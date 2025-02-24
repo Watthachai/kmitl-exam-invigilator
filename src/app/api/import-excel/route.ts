@@ -27,6 +27,13 @@ async function getDepartmentNameFromCode(
 ): Promise<string> {
   console.log(`Processing subject code: ${code}`);
 
+  // เพิ่มการตรวจสอบวิชา GenEd ก่อน
+  const genEdPrefixes = ['901', '902', '903', '904', '905', '906', '966'];
+  if (genEdPrefixes.some(prefix => code.startsWith(prefix))) {
+    console.log(`Found GenEd subject for code: ${code}`);
+    return 'วิชาเสรีทั่วไป';
+  }
+
   // 1. ตรวจสอบรหัสเต็มก่อน (สำหรับกรณีพิเศษเช่น SIIE)
   const specialDept = departments.find(dept => dept.codes.includes(code));
   if (specialDept) {
@@ -164,16 +171,22 @@ async function upsertSubject(
     where: { name: deptName }
   });
 
+  // เช็คว่าเป็นวิชา GenEd หรือไม่
+  const genEdPrefixes = ['901', '902', '903', '904', '905', '906', '966'];
+  const isGenEd = genEdPrefixes.some(prefix => code.startsWith(prefix));
+
   const subject = await tx.subject.upsert({
     where: { code },
     create: {
       code,
       name,
-      departmentId: department.id
+      departmentId: department.id,
+      isGenEd // เพิ่ม flag isGenEd
     },
     update: {
       name,
-      departmentId: department.id
+      departmentId: department.id,
+      isGenEd // อัพเดท flag isGenEd
     }
   });
 
