@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import prisma from '@/app/lib/prisma';
 
-export async function PUT(
-    request: Request,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params;
-        const {
-            date, startTime, endTime, roomId, subjectGroupId,
-            invigilatorId, previousInvigilatorId
+        const { 
+            date, startTime, endTime, roomId, subjectGroupId, 
+            invigilatorId, previousInvigilatorId, updateQuota,
+            shouldDecreaseQuota // เพิ่มฟิลด์นี้
         } = await request.json();
 
         return await prisma.$transaction(async (tx) => {
-            // ถ้ามีการเปลี่ยนแปลงผู้คุมสอบ
-            if (previousInvigilatorId !== invigilatorId) {
+            // ถ้ามีการเปลี่ยน invigilator และต้องการอัพเดทโควต้า
+            if (updateQuota && previousInvigilatorId !== invigilatorId) {
                 // ลดโควต้าของผู้คุมสอบคนเก่า
                 if (previousInvigilatorId) {
                     await tx.invigilator.update({
@@ -24,7 +22,7 @@ export async function PUT(
                 }
 
                 // เพิ่มโควต้าให้ผู้คุมสอบคนใหม่ (ถ้ามี)
-                if (invigilatorId) {
+                if (invigilatorId && !shouldDecreaseQuota) {
                     const newInvigilator = await tx.invigilator.findUnique({
                         where: { id: invigilatorId }
                     });
@@ -67,7 +65,7 @@ export async function PUT(
             return NextResponse.json(updatedSchedule);
         });
     } catch (error) {
-        console.error('Error updating schedule:', error);
+        console.error("Error updating schedule:", error);
         return NextResponse.json(
             { error: error instanceof Error ? error.message : 'Failed to update schedule' },
             { status: 500 }

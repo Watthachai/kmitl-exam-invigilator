@@ -97,6 +97,7 @@ async function getDepartmentNameFromCode(
       OR: [
         { code: code.substring(2, 4) }, // หลักที่ 3-4
         { code: code.substring(0, 4) }, // 4 หลักแรก
+        { code: code.substring(0, 3)},
         { code }, // รหัสเต็ม
         {
           metadata: {

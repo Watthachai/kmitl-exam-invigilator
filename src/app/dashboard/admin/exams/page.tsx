@@ -294,6 +294,11 @@ export default function ExamsPage() {
                     return;
                 }
             }
+            
+            // เพิ่มการตรวจสอบกรณียกเลิกการกำหนดผู้คุมสอบ
+            if (selectedSchedule?.invigilator?.id && !editSchedule.invigilator?.id) {
+                console.log('Removing invigilator, should decrease quota');
+            }
         }
 
         const response = await fetch(`/api/schedules/${editSchedule.id}`, {
@@ -307,7 +312,8 @@ export default function ExamsPage() {
                 roomId: editSchedule.room.id,
                 invigilatorId: editSchedule.invigilator?.id || null,
                 previousInvigilatorId: selectedSchedule?.invigilator?.id,
-                updateQuota: true
+                updateQuota: true,
+                shouldDecreaseQuota: selectedSchedule?.invigilator?.id && !editSchedule.invigilator?.id // เพิ่มฟิลด์นี้
             }),
         });
 
