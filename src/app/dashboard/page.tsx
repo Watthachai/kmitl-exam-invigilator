@@ -14,7 +14,7 @@ interface Schedule {
   semester: number;
   academicYear: number;
   date: Date;
-  scheduleDateOption: 'MORNING' | 'AFTERNOON';
+  scheduleDateOption: 'ช่วงเช้า' | 'ช่วงบ่าย';
   room: {
     building: string;
     roomNumber: string;
@@ -22,6 +22,10 @@ interface Schedule {
   subjectGroup: {
     subject: {
       code: string;
+      name: string;
+    };
+    professor: {
+      id: string;
       name: string;
     };
   };
@@ -82,11 +86,22 @@ export default function DashboardPage() {
   const fetchAvailableSchedules = async () => {
     try {
       const response = await fetch('/api/schedules/available');
-      if (!response.ok) {
-        throw new Error('Failed to fetch available schedules');
-      }
       const data = await response.json();
-      setAvailableSchedules(data);
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch available schedules');
+      }
+  
+      console.log('Available schedules:', data); // เพิ่ม log เพื่อ debug
+      const sortedSchedules = data.sort((a: Schedule, b: Schedule) => {
+        const isAProfessor = session?.user?.professorId === a.subjectGroup.professor?.id;
+        const isBProfessor = session?.user?.professorId === b.subjectGroup.professor?.id;
+        
+        if (isAProfessor && !isBProfessor) return -1;
+        if (!isAProfessor && isBProfessor) return 1;
+        return 0;
+      });
+      setAvailableSchedules(sortedSchedules);
     } catch (error) {
       console.error('Error fetching available schedules:', error);
       toast.error('ไม่สามารถโหลดรายการวิชาที่เปิดให้เลือกได้');
@@ -157,9 +172,19 @@ export default function DashboardPage() {
         className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100"
       >
         <div className="space-y-1 text-center md:text-left">
-          <h1 className="text-2xl font-bold text-gray-800">
-            ยินดีต้อนรับ, {session?.user?.name}
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-800">
+              ยินดีต้อนรับ, {session?.user?.name}
+            </h1>
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full whitespace-nowrap">
+                โควต้าคงเหลือ: {session?.user?.quota ?? 0}/{session?.user?.maxQuota ?? 0}
+              </span>
+              <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full whitespace-nowrap">
+                ได้รับมอบหมายแล้ว: {session?.user?.assignedQuota ?? 0}
+              </span>
+            </div>
+          </div>
           <p className="text-gray-500">
             ระบบจัดการการคุมสอบ คณะวิศวกรรมศาสตร์
           </p>
@@ -241,54 +266,111 @@ export default function DashboardPage() {
               ไม่พบวิชาที่เปิดให้เลือกคุมสอบในขณะนี้
             </div>
           ) : (
-            availableSchedules.map((schedule) => (
-              <div key={schedule.id} className="p-4 hover:bg-gray-50 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-medium">
-                      {schedule.examType === 'MIDTERM' ? 'สอบกลางภาค' : 'สอบปลายภาค'} {schedule.semester}/{schedule.academicYear}
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      {schedule.subjectGroup.subject.code} - {schedule.subjectGroup.subject.name}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      ห้อง: {schedule.room.building} {schedule.room.roomNumber}
-                      ({schedule.scheduleDateOption === 'MORNING' ? 'ช่วงเช้า' : 'ช่วงบ่าย'})
-                    </p>
-                    <div className="mt-2 flex items-center gap-2">
-                      {schedule.priority && (
-                        <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">
-                          วิชาภาควิชา
+            availableSchedules.map((schedule) => {
+              // เพิ่ม debug logs
+              console.log('Schedule debug:', {
+                scheduleId: schedule.id,
+                subjectCode: schedule.subjectGroup.subject.code,
+                professorId: schedule.subjectGroup.professor?.id,
+                currentUserProfessorId: session?.user?.professorId,
+                isProfessorMatch: session?.user?.professorId === schedule.subjectGroup.professor?.id
+              });
+
+              const isProfessor = session?.user?.professorId === schedule.subjectGroup.professor?.id;
+              
+              return (
+                <div 
+                  key={schedule.id} 
+                  className={`p-4 transition-colors ${
+                    isProfessor 
+                      ? 'border-l-4 border-blue-500 bg-blue-50 hover:bg-blue-100' 
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium">
+                          {schedule.subjectGroup.subject.code} - {schedule.subjectGroup.subject.name}
+                        </h3>
+                        {/* แสดง badge ถ้าเป็นผู้สอน */}
+                        {isProfessor && (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full border border-blue-200">
+                            คุณเป็นผู้สอน 👨‍🏫
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* เพิ่มการแสดงชื่อผู้สอน */}
+                      <p className="text-sm text-gray-600 mt-1">
+                        ผู้สอน: {schedule.subjectGroup.professor?.name || 'ไม่ระบุ'} 
+                        {isProfessor && ' (คุณ)'}
+                      </p>
+                      
+                      <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+                        <span className={`px-2 py-1 rounded-full ${
+                          schedule.examType === 'MIDTERM' 
+                            ? 'bg-orange-100 text-orange-700' 
+                            : 'bg-purple-100 text-purple-700'
+                        }`}>
+                          {schedule.examType === 'MIDTERM' ? '📝 สอบกลางภาค' : '📚 สอบปลายภาค'}
                         </span>
-                      )}
-                      {schedule.isGenEd && (
-                        <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
-                          วิชา GenEd
+                        <span className={`px-2 py-1 rounded-full ${
+                          schedule.scheduleDateOption === 'ช่วงเช้า'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-indigo-100 text-indigo-700'
+                        }`}>
+                          {schedule.scheduleDateOption === 'ช่วงเช้า' ? '🌅 ช่วงเช้า' : '🌆 ช่วงบ่าย'}
                         </span>
-                      )}
-                      <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
-                        เหลือโควต้า {schedule.departmentQuota}
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full">
+                          {schedule.semester}/{schedule.academicYear}
+                        </span>
+                      </div>
+
+                      <p className="mt-2 text-sm text-gray-500">
+                        ห้อง: {schedule.room.building} {schedule.room.roomNumber}
+                      </p>
+                      
+                      <div className="mt-2 flex items-center gap-2">
+                        {schedule.priority && (
+                          <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">
+                            🎯 วิชาภาควิชา
+                          </span>
+                        )}
+                        {schedule.isGenEd && (
+                          <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
+                            🎓 วิชา GenEd
+                          </span>
+                        )}
+                        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                          👥 เหลือโควต้า {schedule.departmentQuota}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm whitespace-nowrap">
+                        📅 {new Date(schedule.date).toLocaleDateString('th-TH', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
                       </span>
+                      <button
+                        onClick={() => handleSelectSchedule(schedule.id)}
+                        className={`px-4 py-2 text-white text-sm rounded-lg transition-colors ${
+                          isProfessor 
+                            ? 'bg-blue-600 hover:bg-blue-700' 
+                            : 'bg-blue-500 hover:bg-blue-600'
+                        }`}
+                      >
+                        {isProfessor ? '✨ เลือกคุมสอบ (ผู้สอน)' : '🎯 เลือกคุมสอบ'}
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm whitespace-nowrap">
-                      {new Date(schedule.date).toLocaleDateString('th-TH', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })}
-                    </span>
-                    <button
-                      onClick={() => handleSelectSchedule(schedule.id)}
-                      className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
-                    >
-                      เลือกคุมสอบ
-                    </button>
-                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </motion.div>
@@ -325,7 +407,7 @@ export default function DashboardPage() {
                       {exam.subjectGroup.subject.code} - {exam.subjectGroup.subject.name}
                     </p>
                     <p className="text-sm text-gray-500">
-                      ห้อง: {exam.room.building} {exam.room.roomNumber} ({exam.scheduleDateOption === 'MORNING' ? 'ช่วงเช้า' : 'ช่วงบ่าย'})
+                      ห้อง: {exam.room.building} {exam.room.roomNumber} ({exam.scheduleDateOption === 'ช่วงเช้า' ? 'ช่วงเช้า' : 'ช่วงบ่าย'})
                     </p>
                     <div className="mt-2 flex items-center gap-2">
                       {exam.priority && (
