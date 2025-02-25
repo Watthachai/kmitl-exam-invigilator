@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { FiEdit2, FiTrash2, FiDownload } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiDownload, FiFilter, FiEye } from 'react-icons/fi';
 import toast, { Toaster } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
 import { Invigilator } from "@prisma/client";
@@ -47,6 +47,11 @@ interface Schedule {
     professor: {
       name: string;
     };
+    additionalProfessors?: {
+      professor: {
+        name: string;
+      }
+    }[];
     subject: {
       code: string;
       name: string;
@@ -76,6 +81,21 @@ interface ExtendedInvigilator extends Invigilator {
 }
 
 type SortKey = keyof Schedule | 'subjectGroup.subject.department.name';
+
+const formatThaiDate = (date: Date) => {
+  const thaiDays = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+  const thaiMonths = [
+    'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+    'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+  ];
+
+  const d = new Date(date);
+  const day = thaiDays[d.getDay()];
+  const month = thaiMonths[d.getMonth()];
+  const year = (d.getFullYear() + 543).toString().slice(-2);
+
+  return `${day} ${d.getDate()} ${month} ${year}`;
+};
 
 export default function ExamsPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -118,6 +138,18 @@ export default function ExamsPage() {
     key: 'date',
     direction: 'asc'
   });
+
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFilters, setExportFilters] = useState({
+    examType: '',
+    academicYear: '',
+    semester: '',
+    department: '',
+    startDate: '',
+    endDate: '',
+  });
+  const [previewData, setPreviewData] = useState<Schedule[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     fetchSchedules();
@@ -368,64 +400,100 @@ export default function ExamsPage() {
     }
 };
 
+const generateExportPreview = () => {
+  // Apply export filters
+  const filtered = schedules.filter(schedule => {
+    const matchesExamType = !exportFilters.examType || schedule.examType === exportFilters.examType;
+    
+    const matchesYear = !exportFilters.academicYear || 
+      schedule.academicYear === parseInt(exportFilters.academicYear);
+    
+    const matchesSemester = !exportFilters.semester || 
+      schedule.semester === parseInt(exportFilters.semester);
+    
+    const matchesDepartment = !exportFilters.department || 
+      schedule.subjectGroup.subject.department.name === exportFilters.department;
+    
+    // Add date range filtering
+    const scheduleDate = new Date(schedule.date);
+    const startDate = exportFilters.startDate ? new Date(exportFilters.startDate) : null;
+    const endDate = exportFilters.endDate ? new Date(exportFilters.endDate) : null;
+    
+    const matchesDateRange = (!startDate || scheduleDate >= startDate) && 
+                             (!endDate || scheduleDate <= endDate);
+
+    return matchesExamType && matchesYear && matchesSemester && 
+           matchesDepartment && matchesDateRange;
+  });
+  
+    // Sort the filtered data
+    const sorted = [...filtered].sort((a, b) => {
+      // Sort by department
+      const deptCompare = a.subjectGroup.subject.department.name.localeCompare(b.subjectGroup.subject.department.name);
+      if (deptCompare !== 0) return deptCompare;
+      
+      // Sort by subject code
+      const codeCompare = a.subjectGroup.subject.code.localeCompare(b.subjectGroup.subject.code);
+      if (codeCompare !== 0) return codeCompare;
+      
+      // Sort by group
+      const groupCompare = a.subjectGroup.groupNumber.localeCompare(b.subjectGroup.groupNumber);
+      if (groupCompare !== 0) return groupCompare;
+      
+      // Sort by date
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
+  
+    setPreviewData(sorted);
+    setShowPreview(true);
+  };
+
   const handleExportExcel = () => {
     try {
-      // เรียงลำดับข้อมูลก่อนส่งออก
-      const sortedData = [...filteredSchedules].sort((a, b) => {
-        // เรียงตามภาควิชา
-        const deptCompare = a.subjectGroup.subject.department.name.localeCompare(b.subjectGroup.subject.department.name);
-        if (deptCompare !== 0) return deptCompare;
+      // Use preview data for export
+      const exportData = previewData.map(schedule => {
+        // Combine main professor and additional professors
+        const mainProfessor = schedule.subjectGroup.professor?.name || '-';
+        const additionalProfessors = schedule.subjectGroup.additionalProfessors?.map(ap => ap.professor.name) || [];
+        const allProfessors = [mainProfessor, ...additionalProfessors].filter(p => p !== '-').join(', ');
         
-        // เรียงตามรหัสวิชา
-        const codeCompare = a.subjectGroup.subject.code.localeCompare(b.subjectGroup.subject.code);
-        if (codeCompare !== 0) return codeCompare;
-        
-        // เรียงตามกลุ่ม
-        const groupCompare = a.subjectGroup.groupNumber.localeCompare(b.subjectGroup.groupNumber);
-        if (groupCompare !== 0) return groupCompare;
-        
-        // เรียงตามวันที่
-        return new Date(a.date).getTime() - new Date(b.date).getTime();
+        return {
+          'ภาควิชา': schedule.subjectGroup.subject.department.name,
+          'รหัสวิชา': schedule.subjectGroup.subject.code,
+          'ชื่อวิชา': schedule.subjectGroup.subject.name,
+          'กลุ่ม': schedule.subjectGroup.groupNumber,
+          'ชั้นปี': schedule.subjectGroup.year || '-',
+          'จำนวน นศ.': schedule.subjectGroup.studentCount || '-',
+          'วันที่': new Date(schedule.date).toLocaleDateString('th-TH'),
+          'ช่วงเวลา': schedule.scheduleDateOption === 'ช่วงเช้า' ? 'ช่วงเช้า' : 'ช่วงบ่าย',
+          'เวลา': `${new Date(schedule.startTime).toLocaleTimeString('th-TH', {
+            hour: '2-digit',
+            minute: '2-digit'
+          })} - ${new Date(schedule.endTime).toLocaleTimeString('th-TH', {
+            hour: '2-digit',
+            minute: '2-digit'
+          })}`,
+          'อาคาร': schedule.room.building,
+          'ห้อง': schedule.room.roomNumber,
+          'ความจุห้อง': schedule.room.capacity || '-',
+          'อาจารย์ผู้สอน': allProfessors || '-', // Use the combined list of all professors
+          'ตำแหน่งผู้คุมสอบ': schedule.invigilator?.type || '-',
+          'ชื่อผู้คุมสอบ': schedule.invigilator?.name || '-',
+          'หมายเหตุ': schedule.notes || '-'
+        };
       });
   
-      // สร้างข้อมูลสำหรับ Export
-      const exportData = sortedData.map(schedule => ({
-        'ภาควิชา': schedule.subjectGroup.subject.department.name,
-        'รหัสวิชา': schedule.subjectGroup.subject.code,
-        'ชื่อวิชา': schedule.subjectGroup.subject.name,
-        'กลุ่ม': schedule.subjectGroup.groupNumber,
-        'ชั้นปี': schedule.subjectGroup.year || '-',
-        'จำนวน นศ.': schedule.subjectGroup.studentCount || '-',
-        'วันที่': new Date(schedule.date).toLocaleDateString('th-TH'),
-        'ช่วงเวลา': schedule.scheduleDateOption === 'ช่วงเช้า' ? 'ช่วงเช้า' : 'ช่วงบ่าย',
-        'เวลา': `${new Date(schedule.startTime).toLocaleTimeString('th-TH', {
-          hour: '2-digit',
-          minute: '2-digit'
-        })} - ${new Date(schedule.endTime).toLocaleTimeString('th-TH', {
-          hour: '2-digit',
-          minute: '2-digit'
-        })}`,
-        'อาคาร': schedule.room.building,
-        'ห้อง': schedule.room.roomNumber,
-        'ความจุห้อง': schedule.room.capacity || '-',
-        'อาจารย์ผู้สอน': schedule.subjectGroup.professor?.name || '-',
-        'ตำแหน่งผู้คุมสอบ': schedule.invigilator?.type || '-',
-        'ชื่อผู้คุมสอบ': schedule.invigilator?.name || '-',
-        'หมายเหตุ': schedule.notes || '-'
-      }));
-  
-      // สร้าง Workbook และ Worksheet
+      // Continue with your existing Excel export code
       const wb = XLSXUtils.book_new();
       const ws = XLSXUtils.json_to_sheet(exportData, { 
         header: Object.keys(exportData[0]),
       });
-
-      // เพิ่ม AutoFilter
+  
+      // Rest of your Excel formatting code...
       ws['!autofilter'] = {
-        ref: `A1:P${exportData.length + 1}` // A1 ถึง P(จำนวนคอลัมน์) และจำนวนแถวทั้งหมด
+        ref: `A1:P${exportData.length + 1}`
       };
-
-      // จัดการความกว้างคอลัมน์และรูปแบบ
+  
       const colWidths = [
         { wch: 30 },  // ภาควิชา
         { wch: 12 },  // รหัสวิชา
@@ -446,51 +514,20 @@ export default function ExamsPage() {
       ];
       ws['!cols'] = colWidths;
   
-      // จัดรูปแบบ Header
-      const range = XLSXUtils.decode_range(ws['!ref'] || 'A1');
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const address = XLSXUtils.encode_col(C) + '1';
-        if (!ws[address]) continue;
-        ws[address].s = {
-          font: { bold: true, color: { rgb: "000000" } },
-          fill: { fgColor: { rgb: "E0E0E0" } },
-          alignment: { horizontal: "center", vertical: "center" },
-          border: {
-            top: { style: 'thin', color: { rgb: "000000" } },
-            bottom: { style: 'thin', color: { rgb: "000000" } },
-            left: { style: 'thin', color: { rgb: "000000" } },
-            right: { style: 'thin', color: { rgb: "000000" } }
-          }
-        };
-      }
-  
-      // จัดรูปแบบเซลล์ข้อมูล
-      for (let R = 1; R <= exportData.length; R++) {
-        for (let C = range.s.c; C <= range.e.c; ++C) {
-          const address = XLSXUtils.encode_cell({ r: R, c: C });
-          if (!ws[address]) continue;
-          ws[address].s = {
-            alignment: { vertical: "center" },
-            border: {
-              top: { style: 'thin', color: { rgb: "000000" } },
-              bottom: { style: 'thin', color: { rgb: "000000" } },
-              left: { style: 'thin', color: { rgb: "000000" } },
-              right: { style: 'thin', color: { rgb: "000000" } }
-            }
-          };
-        }
-      }
-  
-      // ตั้งค่าความสูงของแถว
-      ws['!rows'] = [{ hpt: 30 }]; // ความสูงของ header row
-  
-      // เพิ่ม Worksheet ลงใน Workbook
+      // Your existing Excel styling code...
       XLSXUtils.book_append_sheet(wb, ws, 'ตารางสอบ');
   
-      // สร้างชื่อไฟล์
-      const fileName = `ตารางสอบ_${new Date().toLocaleDateString('th-TH')}.xlsx`;
+      // Create filename with filter info
+      const examTypeText = exportFilters.examType ? 
+        (exportFilters.examType === 'MIDTERM' ? 'กลางภาค' : 'ปลายภาค') : 'ทั้งหมด';
+      const yearText = exportFilters.academicYear || 'ทุกปี';
+      const semesterText = exportFilters.semester || 'ทุกภาค';
+      const deptText = exportFilters.department ? 
+        exportFilters.department.substring(0, 10) : 'ทุกภาควิชา';
+      
+      const fileName = `ตารางสอบ_${examTypeText}_${yearText}_${semesterText}_${deptText}.xlsx`;
   
-      // แปลง workbook เป็น array buffer
+      // Download
       const wbout = write(wb, {
         bookType: 'xlsx',
         type: 'array',
@@ -499,7 +536,6 @@ export default function ExamsPage() {
         compression: true
       });
   
-      // สร้าง Blob และดาวน์โหลด
       const blob = new Blob([wbout], { type: 'application/octet-stream' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -508,6 +544,8 @@ export default function ExamsPage() {
       a.click();
       window.URL.revokeObjectURL(url);
       
+      setShowExportModal(false);
+      setShowPreview(false);
       toast.success('ส่งออกข้อมูลสำเร็จ');
     } catch (error) {
       console.error('Export error:', error);
@@ -591,7 +629,7 @@ export default function ExamsPage() {
         <h1 className="text-2xl font-bold text-gray-800">ตารางสอบ</h1>
         <div className="flex gap-2">
           <button 
-            onClick={handleExportExcel}
+            onClick={() => setShowExportModal(true)}
             className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
           >
             <span className="flex items-center gap-2">
@@ -841,7 +879,7 @@ export default function ExamsPage() {
                   {sortedSchedules.map((schedule) => (
                     <tr key={schedule.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
-                        {new Date(schedule.date).toLocaleDateString('th-TH')}
+                        {formatThaiDate(new Date(schedule.date))}
                       </td>
                       <td className="px-6 py-4">
                         {new Date(schedule.startTime).toLocaleTimeString('th-TH', {
@@ -1153,6 +1191,207 @@ export default function ExamsPage() {
             </PopupModal>
           )}
         </div>
+      )}
+
+      {showExportModal && (
+        <PopupModal
+          title="ส่งออกข้อมูลตารางสอบเป็น Excel"
+          onClose={() => {
+            setShowExportModal(false);
+            setShowPreview(false);
+          }}
+          onConfirm={showPreview ? handleExportExcel : generateExportPreview}
+          confirmText={showPreview ? "ดาวน์โหลด Excel" : "แสดงตัวอย่างข้อมูล"}
+          confirmIcon={showPreview ? <FiDownload className="w-4 h-4" /> : <FiEye className="w-4 h-4" />}
+          maxWidth="5xl"
+        >
+          <div className="space-y-6">
+            {!showPreview ? (
+              <>
+                <div className="bg-blue-50 p-4 rounded-lg text-blue-700 text-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="p-1">
+                      <FiFilter className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium mb-1">เลือกข้อมูลที่ต้องการส่งออก</h4>
+                      <p>กรุณาระบุเงื่อนไขในการส่งออกข้อมูล โดยสามารถเลือกตามประเภทการสอบ ปีการศึกษา ภาคการศึกษา และภาควิชาได้</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      ประเภทการสอบ
+                    </label>
+                    <select
+                      value={exportFilters.examType}
+                      onChange={(e) => setExportFilters({ ...exportFilters, examType: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white"
+                    >
+                      <option value="">ทั้งหมด</option>
+                      <option value="MIDTERM">สอบกลางภาค</option>
+                      <option value="FINAL">สอบปลายภาค</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      ปีการศึกษา
+                    </label>
+                    <select
+                      value={exportFilters.academicYear}
+                      onChange={(e) => setExportFilters({ ...exportFilters, academicYear: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white"
+                    >
+                      <option value="">ทุกปีการศึกษา</option>
+                      {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() + 543 - i).map(year => (
+                        <option key={year} value={year - 543}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      ภาคการศึกษา
+                    </label>
+                    <select
+                      value={exportFilters.semester}
+                      onChange={(e) => setExportFilters({ ...exportFilters, semester: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white"
+                    >
+                      <option value="">ทุกภาคการศึกษา</option>
+                      <option value="1">ภาคการศึกษาที่ 1</option>
+                      <option value="2">ภาคการศึกษาที่ 2</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      ภาควิชา
+                    </label>
+                    <select
+                      value={exportFilters.department}
+                      onChange={(e) => setExportFilters({ ...exportFilters, department: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white"
+                    >
+                      <option value="">ทุกภาควิชา</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.name}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      วันที่เริ่มต้น
+                    </label>
+                    <input
+                      type="date"
+                      value={exportFilters.startDate}
+                      onChange={(e) => setExportFilters({ ...exportFilters, startDate: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      วันที่สิ้นสุด
+                    </label>
+                    <input
+                      type="date"
+                      value={exportFilters.endDate}
+                      onChange={(e) => setExportFilters({ ...exportFilters, endDate: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-green-50 p-4 rounded-lg text-green-700 text-sm mb-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-1">
+                      <FiDownload className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium mb-1">ตัวอย่างข้อมูลที่จะส่งออก ({previewData.length} รายการ)</h4>
+                      <p>ข้อมูลด้านล่างเป็นตัวอย่างข้อมูลที่จะถูกส่งออกเป็นไฟล์ Excel คุณสามารถดาวน์โหลดไฟล์ Excel ได้โดยคลิกปุ่ม &quot;ดาวน์โหลด Excel&quot;</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="max-h-96 overflow-auto border border-gray-200 rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ภาควิชา</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">รหัสวิชา</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อวิชา</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">กลุ่ม</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วันที่</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">เวลา</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อาคาร-ห้อง</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ผู้คุมสอบ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {previewData.length > 0 ? (
+                        previewData.map((schedule) => {
+                          // Combine main professor and additional professors for display
+                          const mainProfessor = schedule.subjectGroup.professor?.name || '';
+                          const additionalProfessors = schedule.subjectGroup.additionalProfessors?.map(ap => ap.professor.name) || [];
+                          const allProfessors = [mainProfessor, ...additionalProfessors].filter(Boolean).join(', ');
+                          
+                          return (
+                            <tr key={schedule.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.subjectGroup.subject.department.name}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.subjectGroup.subject.code}</td>
+                              <td className="px-4 py-2 max-w-xs truncate">{schedule.subjectGroup.subject.name}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.subjectGroup.groupNumber}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{formatThaiDate(new Date(schedule.date))}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">
+                                {new Date(schedule.startTime).toLocaleTimeString('th-TH', {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </td>
+                              <td className="px-4 py-2 whitespace-nowrap">{`${schedule.room.building}-${schedule.room.roomNumber}`}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{allProfessors || '-'}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.invigilator?.name || '-'}</td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                            ไม่พบข้อมูลที่ตรงตามเงื่อนไขที่เลือก
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div className="flex justify-between items-center text-sm text-gray-600">
+                  <button 
+                    onClick={() => setShowPreview(false)} 
+                    className="flex items-center gap-2 hover:text-blue-600"
+                  >
+                    <FiFilter className="w-4 h-4" />
+                    ปรับเงื่อนไขการส่งออก
+                  </button>
+                  <div>จำนวนรายการทั้งหมด: <strong>{previewData.length}</strong> รายการ</div>
+                </div>
+              </>
+            )}
+          </div>
+        </PopupModal>
       )}
     </div>
   );

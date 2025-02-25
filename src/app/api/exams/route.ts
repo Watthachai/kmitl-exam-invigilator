@@ -5,13 +5,29 @@ export async function GET() {
   try {
     const schedules = await prisma.schedule.findMany({
       include: {
+        room: true,
         subjectGroup: {
           include: {
-            subject: true,
-          },
+            subject: {
+              include: {
+                department: true,
+              }
+            },
+            professor: true,
+            additionalProfessors: {
+              include: {
+                professor: true,
+              }
+            }
+          }
         },
         invigilator: true,
       },
+      orderBy: [
+        { academicYear: 'desc' },
+        { semester: 'desc' },
+        { date: 'asc' },
+      ],
     });
     return NextResponse.json(schedules);
   } catch (error) {
@@ -22,7 +38,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
-        const { date, startTime, endTime, roomId, subjectGroupId, invigilatorId } = await request.json();
+        const { date, startTime, endTime, roomId, subjectGroupId, invigilatorId, examType, academicYear, semester } = await request.json();
         
         const schedule = await prisma.schedule.create({
         data: {
@@ -33,6 +49,9 @@ export async function POST(request: Request) {
             room: { connect: { id: roomId } },
             subjectGroup: { connect: { id: subjectGroupId } },
             invigilator: { connect: { id: invigilatorId } },
+            examType: examType || 'MIDTERM',
+            academicYear: academicYear || new Date().getFullYear(),
+            semester: semester || 1,
         },
         include: {
             room: true,

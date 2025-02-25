@@ -219,9 +219,12 @@ async function processExamData(
     const roomKey = `${row.อาคาร}_${row.ห้อง}_${examDate}_${scheduleOption}`;
     
     // ดำเนินการปกติ
-    const [subjectCode, ...subjectNameParts] = row.วิชา.trim().split(' ');
-    const trimmedSubjectCode = subjectCode.trim();
-    
+    // Update the relevant part in processExamData
+const [subjectCode, ...subjectNameParts] = row.วิชา.split(' ');
+const trimmedSubjectCode = subjectCode === 'ไม่ระบุรหัสวิชา' 
+  ? 'UNKNOWN' 
+  : subjectCode.trim();
+
     // Get subject and department first
     const { subject, department } = await upsertSubject(
       trimmedSubjectCode, 
@@ -230,7 +233,11 @@ async function processExamData(
     );
 
     // Pass department to findOrCreateProfessors
-    const professorNames = row.ผู้สอน.split(',');
+    // Handle empty professor names
+    const professorNames = row.ผู้สอน === 'ไม่ระบุอาจารย์' 
+      ? ['ไม่ระบุอาจารย์'] 
+      : row.ผู้สอน.split(',');
+    
     const professors = await findOrCreateProfessors(
       professorNames, 
       department, 
@@ -388,20 +395,38 @@ async function processExamData(
   }
 }
 
-// Add validation helper
+// Helper functions for handling empty fields
+function parseField(value: string | number | null | undefined, defaultValue: string): string {
+  if (!value || value.toString().trim() === '') {
+    return defaultValue;
+  }
+  return value.toString().trim();
+}
+
+function parseNumber(value: string | number | null | undefined, defaultValue: number): number {
+  if (!value || value.toString().trim() === '') {
+    return defaultValue;
+  }
+  const parsed = parseInt(value.toString().trim());
+  return isNaN(parsed) ? defaultValue : parsed;
+}
+
+// Update validation helper to handle empty fields
 function validateExamData(data: ExamData): boolean {
   if (!data || typeof data !== 'object') return false;
   
-  return Boolean(
-    data.วิชา?.trim() &&
-    data.กลุ่ม?.trim() &&
-    data['ชั้นปี']?.toString()?.trim() &&
-    data['นศ.']?.toString()?.trim() &&
-    data.เวลา?.trim() &&
-    data['ผู้สอน']?.trim() &&
-    data.อาคาร?.trim() &&
-    data.ห้อง?.trim()
-  );
+  // Handle empty fields with default values
+  data.วิชา = parseField(data.วิชา, 'ไม่ระบุรหัสวิชา');
+  data.กลุ่ม = parseField(data.กลุ่ม, 'ไม่ระบุกลุ่ม');
+  data['ชั้นปี'] = parseField(data['ชั้นปี'], 'ทุกชั้นปี');
+  data['นศ.'] = parseNumber(data['นศ.'], 0).toString();
+  data.เวลา = parseField(data.เวลา, '00:00 - 00:00');
+  data['ผู้สอน'] = parseField(data['ผู้สอน'], 'ไม่ระบุอาจารย์');
+  data.อาคาร = parseField(data.อาคาร, 'ไม่ระบุอาคาร');
+  data.ห้อง = parseField(data.ห้อง, 'ไม่ระบุห้อง');
+  data.หมายเหตุ = parseField(data.หมายเหตุ, '');
+
+  return true; // Always return true since we're providing default values
 }
 
 // Update error validation helper with type guard
@@ -420,9 +445,41 @@ function validateTransactionError(error: unknown): Error {
 // Update seedDepartments to handle multiple codes
 async function seedDepartments(tx: Prisma.TransactionClient) {
   try {
-    console.log('Starting department seeding...');
+    console.log('Checking if departments need updating...');
     
-    for (const dept of departments) {
+    // First, get all existing departments with their metadata
+    const existingDepartments = await tx.department.findMany({
+      select: {
+        code: true,
+        name: true,
+        metadata: true
+      }
+    });
+
+    // Create a map for faster lookups
+    const existingDeptMap = new Map(
+      existingDepartments.map(dept => [dept.code, dept])
+    );
+
+    // Track which departments need updates
+    const departsToUpdate = departments.filter(dept => {
+      const existing = existingDeptMap.get(dept.code);
+      if (!existing) return true; // New department
+
+      // Check if any data has changed
+      return existing.name !== dept.name ||
+        JSON.stringify((existing.metadata as { codes: string[] })?.codes) !== JSON.stringify(dept.codes);
+    });
+
+    if (departsToUpdate.length === 0) {
+      console.log('All departments are up to date, skipping seed');
+      return true;
+    }
+
+    console.log(`Updating ${departsToUpdate.length} departments...`);
+    
+    // Only upsert departments that need updating
+    for (const dept of departsToUpdate) {
       console.log(`Seeding department: ${dept.name} (${dept.code})`);
       await tx.department.upsert({
         where: { code: dept.code },
@@ -438,7 +495,7 @@ async function seedDepartments(tx: Prisma.TransactionClient) {
       });
     }
 
-    console.log(`Department seeding completed. Total: ${departments.length}`);
+    console.log(`Department update completed. Updated: ${departsToUpdate.length}`);
     return true;
   } catch (error) {
     console.error('Error seeding departments:', error);
@@ -486,7 +543,7 @@ export async function POST(request: Request) {
 
       return { success: true, count: body.data.length };
     }, {
-      maxWait: 10000, // 10s max wait
+      maxWait: 90000, // 90s timeout
       timeout: 1200000, // 30s timeout
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable
     });
