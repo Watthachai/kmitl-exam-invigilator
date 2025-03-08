@@ -24,6 +24,9 @@ interface SubjectGroup {
   studentCount: number;
   subject: Subject;
   professor: Professor;
+  additionalProfessors: { 
+    professor: Professor 
+  }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -215,7 +218,15 @@ export default function SubjectGroupsPage() {
                       <td className="px-6 py-4">{group.groupNumber}</td>
                       <td className="px-6 py-4">{group.year}</td>
                       <td className="px-6 py-4">{group.studentCount}</td>
-                      <td className="px-6 py-4">{group.professor.name}</td>
+                      <td className="px-6 py-4">
+                        {group.professor.name}
+                        {group.additionalProfessors?.length > 0 && (
+                          <>
+                            <br />
+                            {group.additionalProfessors.map(ap => ap.professor.name).join(", ")}
+                          </>
+                        )}
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex justify-end gap-2">
                           <button

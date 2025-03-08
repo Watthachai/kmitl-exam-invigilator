@@ -236,8 +236,8 @@ const trimmedSubjectCode = subjectCode === 'ไม่ระบุรหัสว
     // Handle empty professor names
     const professorNames = row.ผู้สอน === 'ไม่ระบุอาจารย์' 
       ? ['ไม่ระบุอาจารย์'] 
-      : row.ผู้สอน.split(',');
-    
+      : row.ผู้สอน.split(',').map(name => name.trim()).filter(Boolean);
+
     const professors = await findOrCreateProfessors(
       professorNames, 
       department, 
@@ -277,6 +277,27 @@ const trimmedSubjectCode = subjectCode === 'ไม่ระบุรหัสว
         studentCount: parseInt(row['นศ.'].trim()),
       }
     });
+
+    // Add additional professors to the subject group
+    // Start from index 1 since the first professor is already the main professor
+    if (professors.length > 1) {
+      // Delete any existing additional professors first to avoid duplicates
+      await tx.subjectGroupProfessor.deleteMany({
+        where: {
+          subjectGroupId: subjectGroup.id
+        }
+      });
+
+      // Add each additional professor
+      for (let i = 1; i < professors.length; i++) {
+        await tx.subjectGroupProfessor.create({
+          data: {
+            subjectGroupId: subjectGroup.id,
+            professorId: professors[i].id
+          }
+        });
+      }
+    }
 
     const [startTime, endTime] = row.เวลา.split(' - ');
     

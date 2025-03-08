@@ -78,6 +78,8 @@ interface ExtendedInvigilator extends Invigilator {
   type: string;
   assignedQuota: number;
   quota: number;
+  displayName?: string;
+  isProfessor?: boolean;
 }
 
 type SortKey = keyof Schedule | 'subjectGroup.subject.department.name';
@@ -620,6 +622,16 @@ const generateExportPreview = () => {
     }
   };
 
+  // Function to get all professors for a subject group
+  const getAllProfessors = (schedule: Schedule) => {
+    const mainProfessor = schedule.subjectGroup.professor?.name || '-';
+    const additionalProfessors = schedule.subjectGroup.additionalProfessors?.map(
+      ap => ap.professor.name
+    ) || [];
+    
+    const allProfessors = [mainProfessor, ...additionalProfessors].filter(p => p !== '-');
+    return allProfessors.length > 0 ? allProfessors.join(', ') : '-';
+  };
   return (
     <div className="p-6 space-y-6">
       <Toaster/>
@@ -900,7 +912,9 @@ const generateExportPreview = () => {
                       <td className="px-6 py-4">{schedule.subjectGroup.groupNumber}</td>
                       <td className="px-6 py-4">{schedule.subjectGroup.year || '-'}</td>
                       <td className="px-6 py-4">{schedule.subjectGroup.studentCount || '-'}</td>
-                      <td className="px-6 py-4">{schedule.subjectGroup.professor?.name || '-'}</td>
+                      <td className="px-6 py-4">
+                        {getAllProfessors(schedule)}
+                      </td>
                       <td className="px-6 py-4">{schedule.room.building}</td>
                       <td className="px-6 py-4">{schedule.room.roomNumber}</td>
                       <td className="px-6 py-4">{schedule.room.capacity || '-'}</td>
@@ -910,7 +924,23 @@ const generateExportPreview = () => {
                         {schedule.invigilator?.type || '-'}
                       </td>
                       <td className="px-6 py-4">
-                        {schedule.invigilator?.name || '-'}
+                        {/* Show professor name if available, otherwise show invigilator name */}
+                        {(() => {
+                          // If schedule has invigilator
+                          if (schedule.invigilator) {
+                            // Find matching invigilator in state
+                            const matchedInvigilator = invigilators.find(inv => inv.id === schedule.invigilator?.id);
+                            
+                            // If matched and has displayName (from professor), use that
+                            if (matchedInvigilator?.displayName) {
+                              return matchedInvigilator.displayName;
+                            }
+                            
+                            // Otherwise use the name we have
+                            return schedule.invigilator.name || '-';
+                          }
+                          return '-';
+                        })()}
                       </td>
                       <td className="px-6 py-4">
                         {schedule.notes || '-'}
@@ -1050,128 +1080,188 @@ const generateExportPreview = () => {
           )}
 
           {/* Edit Schedule Modal */}
-          {showEditModal && editSchedule && (
-            <PopupModal
-              title="แก้ไขตารางสอบ"
-              onClose={() => setShowEditModal(false)}
-              onConfirm={handleEditSchedule}
-              confirmText="บันทึกการแก้ไข"
-            >
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-700">กลุ่มวิชา</label>
-                    <select
-                      value={editSchedule.subjectGroup.id}
-                      onChange={(e) => setEditSchedule({
-                        ...editSchedule,
-                        subjectGroup: { ...editSchedule.subjectGroup, id: e.target.value }
-                      })}
-                      className="w-full border border-gray-300 p-2 rounded-md"
-                      required
-                    >
-                      <option value="">เลือกกลุ่มวิชา</option>
-                      {subjectGroups.map((group: SubjectGroup) => (
-                        <option key={group.id} value={group.id}>
-                          {group.subject.code} - {group.subject.name} (กลุ่ม {group.groupNumber})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-gray-700">ผู้คุมสอบ</label>
-                    <select
-                      value={editSchedule.invigilator?.id || ''}
-                      onChange={(e) => setEditSchedule({
-                        ...editSchedule,
-                        invigilator: { id: e.target.value, name: '', type: '' }
-                      })}
-                      className="w-full border border-gray-300 p-2 rounded-md"
-                      required
-                    >
-                      <option value="">เลือกผู้คุมสอบ</option>
-                      {invigilators.map((invigilator: ExtendedInvigilator) => (
-                        <option key={invigilator.id} value={invigilator.id}>
-                          {invigilator.name} (โควต้า: {invigilator.assignedQuota}/{invigilator.quota})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+
+        {showEditModal && editSchedule && (
+          <PopupModal
+            title="แก้ไขตารางสอบ"
+            onClose={() => setShowEditModal(false)}
+            onConfirm={handleEditSchedule}
+            confirmText="บันทึกการแก้ไข"
+          >
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-gray-700">กลุ่มวิชา</label>
+                  <select
+                    value={editSchedule.subjectGroup.id}
+                    onChange={(e) => setEditSchedule({
+                      ...editSchedule,
+                      subjectGroup: { ...editSchedule.subjectGroup, id: e.target.value }
+                    })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                    required
+                  >
+                    <option value="">เลือกกลุ่มวิชา</option>
+                    {subjectGroups.map((group: SubjectGroup) => (
+                      <option key={group.id} value={group.id}>
+                        {group.subject.code} - {group.subject.name} (กลุ่ม {group.groupNumber})
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-700">วันที่</label>
-                    <input
-                      type="date"
-                      value={new Date(editSchedule.date).toISOString().split('T')[0]}
-                      onChange={(e) => setEditSchedule({
-                        ...editSchedule,
-                        date: new Date(e.target.value)
-                      })}
-                      className="w-full border border-gray-300 p-2 rounded-md"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700">เวลาเริ่ม</label>
-                    <input
-                      type="time"
-                      value={new Date(editSchedule.startTime).toLocaleTimeString('en-US', { hour12: false })}
-                      onChange={(e) => setEditSchedule({
-                        ...editSchedule,
-                        startTime: new Date(`${editSchedule.date.toDateString()} ${e.target.value}`)
-                      })}
-                      className="w-full border border-gray-300 p-2 rounded-md"
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-700">เวลาสิ้นสุด</label>
-                    <input
-                      type="time"
-                      value={new Date(editSchedule.endTime).toLocaleTimeString('en-US', { hour12: false })}
-                      onChange={(e) => setEditSchedule({
-                        ...editSchedule,
-                        endTime: new Date(`${editSchedule.date.toDateString()} ${e.target.value}`)
-                      })}
-                      className="w-full border border-gray-300 p-2 rounded-md"
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-700">อาคาร</label>
-                    <input
-                      type="text"
-                      value={editSchedule.room.building}
-                      onChange={(e) => setEditSchedule({
-                        ...editSchedule,
-                        room: { ...editSchedule.room, building: e.target.value }
-                      })}
-                      className="w-full border border-gray-300 p-2 rounded-md"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700">หมายเลขห้อง</label>
-                    <input
-                      type="text"
-                      value={editSchedule.room.roomNumber}
-                      onChange={(e) => setEditSchedule({
-                        ...editSchedule,
-                        room: { ...editSchedule.room, roomNumber: e.target.value }
-                      })}
-                      className="w-full border border-gray-300 p-2 rounded-md"
-                      required
-                    />
-                  </div>
+                <div>
+                  <label className="block text-gray-700">ผู้คุมสอบ</label>
+                  <select
+                    value={editSchedule.invigilator?.id || ''}
+                    onChange={(e) => {
+                      const selectedInvigilator = invigilators.find(inv => inv.id === e.target.value);
+                      if (selectedInvigilator) {
+                        setEditSchedule({
+                          ...editSchedule,
+                          invigilator: {
+                            id: selectedInvigilator.id,
+                            name: selectedInvigilator.displayName || selectedInvigilator.name,
+                            type: selectedInvigilator.type
+                          }
+                        });
+                      }
+                    }}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                  >
+                    <option value="">เลือกผู้คุมสอบ</option>
+                    
+                    {/* กลุ่มอาจารย์ */}
+                    <optgroup label="อาจารย์">
+                      {invigilators
+                        .filter(inv => inv.isProfessor)
+                        .map(invigilator => (
+                          <option key={invigilator.id} value={invigilator.id}>
+                            {invigilator.displayName || invigilator.name} {!invigilator.id.startsWith('prof_') && `(โควต้า: ${invigilator.assignedQuota}/${invigilator.quota})`}
+                          </option>
+                        ))
+                      }
+                    </optgroup>
+                    
+                    {/* กลุ่มเจ้าหน้าที่ */}
+                    <optgroup label="เจ้าหน้าที่">
+                      {invigilators
+                        .filter(inv => !inv.isProfessor)
+                        .map(invigilator => (
+                          <option key={invigilator.id} value={invigilator.id}>
+                            {invigilator.displayName || invigilator.name} (โควต้า: {invigilator.assignedQuota}/{invigilator.quota})
+                          </option>
+                        ))
+                      }
+                    </optgroup>
+                  </select>
                 </div>
               </div>
-            </PopupModal>
-          )}
+
+              {/* Add section for professors */}
+              <div>
+                <label className="block text-gray-700 mb-2">อาจารย์ผู้สอน</label>
+                <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
+                  <div className="mb-2">
+                    <p className="text-sm text-gray-500 mb-2">อาจารย์ผู้สอนปัจจุบัน:</p>
+                    <div className="bg-white p-2 rounded border border-gray-200 text-sm">
+                      {getAllProfessors(editSchedule) || '-'}
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    หมายเหตุ: การแก้ไขอาจารย์ผู้สอนสามารถทำได้ที่หน้าจัดการกลุ่มวิชา
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-gray-700">วันที่</label>
+                  <input
+                    type="date"
+                    value={new Date(editSchedule.date).toISOString().split('T')[0]}
+                    onChange={(e) => setEditSchedule({
+                      ...editSchedule,
+                      date: new Date(e.target.value)
+                    })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700">เวลาเริ่ม</label>
+                  <input
+                    type="time"
+                    value={new Date(editSchedule.startTime).toLocaleTimeString('en-US', { hour12: false })}
+                    onChange={(e) => setEditSchedule({
+                      ...editSchedule,
+                      startTime: new Date(`${editSchedule.date.toDateString()} ${e.target.value}`)
+                    })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-gray-700">เวลาสิ้นสุด</label>
+                  <input
+                    type="time"
+                    value={new Date(editSchedule.endTime).toLocaleTimeString('en-US', { hour12: false })}
+                    onChange={(e) => setEditSchedule({
+                      ...editSchedule,
+                      endTime: new Date(`${editSchedule.date.toDateString()} ${e.target.value}`)
+                    })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700">หมายเหตุ</label>
+                  <input
+                    type="text"
+                    value={editSchedule.notes || ''}
+                    onChange={(e) => setEditSchedule({
+                      ...editSchedule,
+                      notes: e.target.value
+                    })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                    placeholder="ระบุหมายเหตุ (ถ้ามี)"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-gray-700">อาคาร</label>
+                  <input
+                    type="text"
+                    value={editSchedule.room.building}
+                    onChange={(e) => setEditSchedule({
+                      ...editSchedule,
+                      room: { ...editSchedule.room, building: e.target.value }
+                    })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700">หมายเลขห้อง</label>
+                  <input
+                    type="text"
+                    value={editSchedule.room.roomNumber}
+                    onChange={(e) => setEditSchedule({
+                      ...editSchedule,
+                      room: { ...editSchedule.room, roomNumber: e.target.value }
+                    })}
+                    className="w-full border border-gray-300 p-2 rounded-md"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </PopupModal>
+        )}
 
           {/* Delete Schedule Modal */}
           {showDeleteModal && selectedSchedule && (
