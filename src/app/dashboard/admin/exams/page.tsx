@@ -450,24 +450,28 @@ const generateExportPreview = () => {
     setShowPreview(true);
   };
 
+    // แก้ไขฟังก์ชัน handleExportExcel ให้แสดงชื่ออาจารย์แทนชื่อ Google Account และเรียงคอลัมน์ให้ตรงกับตารางแสดงผล
   const handleExportExcel = () => {
     try {
-      // Use preview data for export
+      // ใช้ข้อมูลจาก previewData สำหรับการส่งออก
       const exportData = previewData.map(schedule => {
-        // Combine main professor and additional professors
-        const mainProfessor = schedule.subjectGroup.professor?.name || '-';
-        const additionalProfessors = schedule.subjectGroup.additionalProfessors?.map(ap => ap.professor.name) || [];
-        const allProfessors = [mainProfessor, ...additionalProfessors].filter(p => p !== '-').join(', ');
+        // หาชื่ออาจารย์จาก invigilator ที่เชื่อมกับ professor (ถ้ามี)
+        let invigilatorName = schedule.invigilator?.name || '-';
         
+        // ค้นหา invigilator ในรายการ state เพื่อดึง displayName (ถ้ามี)
+        if (schedule.invigilator) {
+          const matchedInvigilator = invigilators.find(inv => inv.id === schedule.invigilator?.id);
+          if (matchedInvigilator?.displayName) {
+            invigilatorName = matchedInvigilator.displayName;
+          }
+        }
+        
+        // รวมรายชื่ออาจารย์ผู้สอน
+        const allProfessors = getAllProfessors(schedule);
+        
+        // คืนค่าข้อมูลที่จะใช้ในการส่งออกตามลำดับเดียวกับตาราง
         return {
-          'ภาควิชา': schedule.subjectGroup.subject.department.name,
-          'รหัสวิชา': schedule.subjectGroup.subject.code,
-          'ชื่อวิชา': schedule.subjectGroup.subject.name,
-          'กลุ่ม': schedule.subjectGroup.groupNumber,
-          'ชั้นปี': schedule.subjectGroup.year || '-',
-          'จำนวน นศ.': schedule.subjectGroup.studentCount || '-',
-          'วันที่': new Date(schedule.date).toLocaleDateString('th-TH'),
-          'ช่วงเวลา': schedule.scheduleDateOption === 'ช่วงเช้า' ? 'ช่วงเช้า' : 'ช่วงบ่าย',
+          'วันที่': formatThaiDate(new Date(schedule.date)),
           'เวลา': `${new Date(schedule.startTime).toLocaleTimeString('th-TH', {
             hour: '2-digit',
             minute: '2-digit'
@@ -475,51 +479,59 @@ const generateExportPreview = () => {
             hour: '2-digit',
             minute: '2-digit'
           })}`,
+          'วิชา': `${schedule.subjectGroup.subject.code} - ${schedule.subjectGroup.subject.name}`,
+          'กลุ่มเรียน': schedule.subjectGroup.groupNumber,
+          'ชั้นปี': schedule.subjectGroup.year || '-',
+          'จำนวน นศ.': schedule.subjectGroup.studentCount || '-',
+          'ผู้สอน': allProfessors,
           'อาคาร': schedule.room.building,
           'ห้อง': schedule.room.roomNumber,
           'ความจุห้อง': schedule.room.capacity || '-',
-          'อาจารย์ผู้สอน': allProfessors || '-', // Use the combined list of all professors
+          'ภาควิชา': schedule.subjectGroup.subject.department.name || '-',
           'ตำแหน่งผู้คุมสอบ': schedule.invigilator?.type || '-',
-          'ชื่อผู้คุมสอบ': schedule.invigilator?.name || '-',
+          'ชื่อเจ้าหน้าที่': invigilatorName, // ใช้ชื่ออาจารย์แทนชื่อ Google
           'หมายเหตุ': schedule.notes || '-'
         };
       });
-  
-      // Continue with your existing Excel export code
+
+      // สร้าง workbook และ worksheet
       const wb = XLSXUtils.book_new();
       const ws = XLSXUtils.json_to_sheet(exportData, { 
-        header: Object.keys(exportData[0]),
+        header: [
+          'วันที่', 'เวลา', 'วิชา', 'กลุ่มเรียน', 'ชั้นปี', 'จำนวน นศ.',
+          'ผู้สอน', 'อาคาร', 'ห้อง', 'ความจุห้อง', 'ภาควิชา', 
+          'ตำแหน่งผู้คุมสอบ', 'ชื่อเจ้าหน้าที่', 'หมายเหตุ'
+        ]
       });
-  
-      // Rest of your Excel formatting code...
+
+      // ตั้งค่า autofilter
       ws['!autofilter'] = {
-        ref: `A1:P${exportData.length + 1}`
+        ref: `A1:N${exportData.length + 1}`
       };
-  
+
+      // กำหนดความกว้างคอลัมน์ให้เหมาะสม
       const colWidths = [
-        { wch: 30 },  // ภาควิชา
-        { wch: 12 },  // รหัสวิชา
-        { wch: 40 },  // ชื่อวิชา
-        { wch: 8 },   // กลุ่ม
-        { wch: 8 },   // ชั้นปี
-        { wch: 12 },  // จำนวน นศ.
         { wch: 15 },  // วันที่
-        { wch: 12 },  // ช่วงเวลา
-        { wch: 20 },  // เวลา
+        { wch: 18 },  // เวลา
+        { wch: 40 },  // วิชา
+        { wch: 10 },  // กลุ่มเรียน
+        { wch: 8 },   // ชั้นปี
+        { wch: 10 },  // จำนวน นศ.
+        { wch: 30 },  // ผู้สอน
         { wch: 15 },  // อาคาร
         { wch: 10 },  // ห้อง
-        { wch: 12 },  // ความจุห้อง
-        { wch: 30 },  // อาจารย์ผู้สอน
-        { wch: 20 },  // ตำแหน่งผู้คุมสอบ
-        { wch: 30 },  // ชื่อผู้คุมสอบ
-        { wch: 30 }   // หมายเหตุ
+        { wch: 10 },  // ความจุห้อง
+        { wch: 30 },  // ภาควิชา
+        { wch: 15 },  // ตำแหน่งผู้คุมสอบ
+        { wch: 30 },  // ชื่อเจ้าหน้าที่
+        { wch: 30 },  // หมายเหตุ
       ];
       ws['!cols'] = colWidths;
-  
-      // Your existing Excel styling code...
+
+      // เพิ่ม worksheet ไปยัง workbook
       XLSXUtils.book_append_sheet(wb, ws, 'ตารางสอบ');
-  
-      // Create filename with filter info
+
+      // สร้างชื่อไฟล์ที่มีข้อมูลตามฟิลเตอร์
       const examTypeText = exportFilters.examType ? 
         (exportFilters.examType === 'MIDTERM' ? 'กลางภาค' : 'ปลายภาค') : 'ทั้งหมด';
       const yearText = exportFilters.academicYear || 'ทุกปี';
@@ -528,8 +540,8 @@ const generateExportPreview = () => {
         exportFilters.department.substring(0, 10) : 'ทุกภาควิชา';
       
       const fileName = `ตารางสอบ_${examTypeText}_${yearText}_${semesterText}_${deptText}.xlsx`;
-  
-      // Download
+
+      // ดาวน์โหลด
       const wbout = write(wb, {
         bookType: 'xlsx',
         type: 'array',
@@ -537,7 +549,7 @@ const generateExportPreview = () => {
         cellStyles: true,
         compression: true
       });
-  
+
       const blob = new Blob([wbout], { type: 'application/octet-stream' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1420,46 +1432,67 @@ const generateExportPreview = () => {
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ภาควิชา</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">รหัสวิชา</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อวิชา</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">กลุ่ม</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วันที่</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">เวลา</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อาคาร-ห้อง</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ผู้คุมสอบ</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วิชา</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">กลุ่มเรียน</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชั้นปี</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">จำนวน นศ.</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ผู้สอน</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อาคาร</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ห้อง</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ความจุห้อง</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ภาควิชา</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ตำแหน่งผู้คุมสอบ</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อเจ้าหน้าที่</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">หมายเหตุ</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {previewData.length > 0 ? (
                         previewData.map((schedule) => {
-                          // Combine main professor and additional professors for display
-                          const mainProfessor = schedule.subjectGroup.professor?.name || '';
-                          const additionalProfessors = schedule.subjectGroup.additionalProfessors?.map(ap => ap.professor.name) || [];
-                          const allProfessors = [mainProfessor, ...additionalProfessors].filter(Boolean).join(', ');
+                          // ค้นหาชื่อผู้คุมสอบจาก displayName ถ้ามี
+                          let invigilatorName = schedule.invigilator?.name || '-';
+                          if (schedule.invigilator) {
+                            const matchedInvigilator = invigilators.find(inv => inv.id === schedule.invigilator?.id);
+                            if (matchedInvigilator?.displayName) {
+                              invigilatorName = matchedInvigilator.displayName;
+                            }
+                          }
+                          
+                          // ใช้ฟังก์ชัน getAllProfessors สำหรับแสดงรายชื่ออาจารย์ผู้สอน
+                          const allProfessors = getAllProfessors(schedule);
                           
                           return (
                             <tr key={schedule.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-2 whitespace-nowrap">{schedule.subjectGroup.subject.department.name}</td>
-                              <td className="px-4 py-2 whitespace-nowrap">{schedule.subjectGroup.subject.code}</td>
-                              <td className="px-4 py-2 max-w-xs truncate">{schedule.subjectGroup.subject.name}</td>
-                              <td className="px-4 py-2 whitespace-nowrap">{schedule.subjectGroup.groupNumber}</td>
                               <td className="px-4 py-2 whitespace-nowrap">{formatThaiDate(new Date(schedule.date))}</td>
                               <td className="px-4 py-2 whitespace-nowrap">
-                                {new Date(schedule.startTime).toLocaleTimeString('th-TH', {
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
+                                {`${new Date(schedule.startTime).toLocaleTimeString('th-TH', {
+                                  hour: '2-digit', minute: '2-digit'
+                                })} - ${new Date(schedule.endTime).toLocaleTimeString('th-TH', {
+                                  hour: '2-digit', minute: '2-digit'
+                                })}`}
                               </td>
-                              <td className="px-4 py-2 whitespace-nowrap">{`${schedule.room.building}-${schedule.room.roomNumber}`}</td>
-                              <td className="px-4 py-2 whitespace-nowrap">{allProfessors || '-'}</td>
-                              <td className="px-4 py-2 whitespace-nowrap">{schedule.invigilator?.name || '-'}</td>
+                              <td className="px-4 py-2 max-w-xs truncate">
+                                {`${schedule.subjectGroup.subject.code} - ${schedule.subjectGroup.subject.name}`}
+                              </td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.subjectGroup.groupNumber}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.subjectGroup.year || '-'}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.subjectGroup.studentCount || '-'}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{allProfessors}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.room.building}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.room.roomNumber}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.room.capacity || '-'}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.subjectGroup.subject.department.name}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.invigilator?.type || '-'}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{invigilatorName}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{schedule.notes || '-'}</td>
                             </tr>
                           );
                         })
                       ) : (
                         <tr>
-                          <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                          <td colSpan={14} className="px-4 py-8 text-center text-gray-500">
                             ไม่พบข้อมูลที่ตรงตามเงื่อนไขที่เลือก
                           </td>
                         </tr>
