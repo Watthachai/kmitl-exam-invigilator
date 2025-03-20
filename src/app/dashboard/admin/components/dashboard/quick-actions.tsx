@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { FileSpreadsheet, Building, Users, Calendar, Settings, Database } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { Database as DatabaseIcon } from 'lucide-react';
 
 export const QuickActions = () => {
   const [isSeeding, setIsSeeding] = useState(false);
@@ -33,56 +32,78 @@ export const QuickActions = () => {
 
   const actions = [
     {
-      title: 'Import Schedule',
+      title: 'นำเข้าตารางสอบ',
       icon: <FileSpreadsheet className="h-8 w-8 text-blue-500" />,
       href: '/dashboard/admin/tables',
-      description: 'Import exam schedules'
+      description: 'นำเข้าข้อมูลตารางสอบจากไฟล์',
+      bgColor: 'bg-blue-50',
+      hoverColor: 'hover:bg-blue-100',
+      borderColor: 'border-blue-300'
     },
     {
-      title: 'Manage Rooms',
+      title: 'จัดการห้องสอบ',
       icon: <Building className="h-8 w-8 text-green-500" />,
       href: '/dashboard/admin/rooms',
-      description: 'Configure exam rooms'
+      description: 'กำหนดและจัดการห้องสอบ',
+      bgColor: 'bg-green-50',
+      hoverColor: 'hover:bg-green-100',
+      borderColor: 'border-green-300'
     },
     {
-      title: 'Invigilators',
+      title: 'ผู้คุมสอบ',
       icon: <Users className="h-8 w-8 text-purple-500" />,
       href: '/dashboard/admin/invigilators',
-      description: 'Manage staff'
+      description: 'จัดการอาจารย์และเจ้าหน้าที่',
+      bgColor: 'bg-purple-50',
+      hoverColor: 'hover:bg-purple-100',
+      borderColor: 'border-purple-300'
     },
     {
-      title: 'View Schedule',
+      title: 'ตารางการสอบ',
       icon: <Calendar className="h-8 w-8 text-orange-500" />,
       href: '/dashboard/admin/schedule',
-      description: 'View exam timetable'
+      description: 'ดูตารางการจัดสอบทั้งหมด',
+      bgColor: 'bg-orange-50',
+      hoverColor: 'hover:bg-orange-100',
+      borderColor: 'border-orange-300'
     },
     {
-      title: 'System Settings',
+      title: 'ตั้งค่าระบบ',
       icon: <Settings className="h-8 w-8 text-gray-500" />,
       href: '/dashboard/admin/settings',
-      description: 'Configure system'
+      description: 'ปรับแต่งการทำงานของระบบ',
+      bgColor: 'bg-gray-50',
+      hoverColor: 'hover:bg-gray-100',
+      borderColor: 'border-gray-300'
     },
     {
-      title: 'Database',
+      title: 'ฐานข้อมูล',
       icon: <Database className="h-8 w-8 text-red-500" />,
       href: '/dashboard/admin/database',
-      description: 'Manage data'
+      description: 'จัดการข้อมูลในระบบ',
+      bgColor: 'bg-red-50',
+      hoverColor: 'hover:bg-red-100',
+      borderColor: 'border-red-300'
     }
   ];
 
   return (
     <div className="grid gap-4">
+      <h2 className="text-xl font-bold text-gray-800 mb-2">คำสั่งด่วน</h2>
+      
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {actions.map((action) => (
-          <Link key={action.title} href={action.href}>
-            <Card className="hover:bg-gray-50 transition-colors cursor-pointer h-full">
+          <Link key={action.title} href={action.href} className="block">
+            <Card className={`${action.bgColor} border ${action.borderColor} ${action.hoverColor} transition-all duration-200 cursor-pointer h-full shadow-sm hover:shadow-md`}>
               <CardHeader className="space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">{action.title}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-col items-center gap-2">
-                  {action.icon}
-                  <p className="text-xs text-gray-500">{action.description}</p>
+                  <div className="p-2 rounded-full bg-white shadow-inner">
+                    {action.icon}
+                  </div>
+                  <p className="text-xs text-gray-600 text-center">{action.description}</p>
                 </div>
               </CardContent>
             </Card>
@@ -93,20 +114,24 @@ export const QuickActions = () => {
       <button
         onClick={handleSeedData}
         disabled={isSeeding}
-        className="flex items-center justify-center gap-2 p-4 bg-yellow-100 rounded-lg hover:bg-yellow-200 transition-colors"
+        className="flex items-center justify-center gap-2 p-4 bg-yellow-100 border border-yellow-300 rounded-lg hover:bg-yellow-200 transition-colors shadow-sm hover:shadow-md mt-2"
       >
         {isSeeding ? (
           <>
             <div className="animate-spin h-5 w-5 border-2 border-yellow-500 border-t-transparent rounded-full" />
-            กำลังอัพเดทข้อมูล...
+            <span className="text-yellow-800 font-medium">กำลังอัพเดทข้อมูล...</span>
           </>
         ) : (
           <>
-            <DatabaseIcon className="w-5 h-5 text-yellow-600" />
-            อัพเดทโควต้าและสถานะตารางสอบ
+            <Database className="w-5 h-5 text-yellow-600" />
+            <span className="text-yellow-800 font-medium">อัพเดทโควต้าและสถานะตารางสอบ</span>
           </>
         )}
       </button>
+      
+      <div className="text-xs text-gray-500 text-center mt-1">
+        กดปุ่มนี้เพื่ออัพเดทโควต้าของผู้คุมสอบและสถานะของตารางสอบในระบบให้เป็นปัจจุบัน
+      </div>
     </div>
   );
 };

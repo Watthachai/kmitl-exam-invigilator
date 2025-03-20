@@ -49,6 +49,8 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   // เพิ่ม state สำหรับ available schedules
   const [availableSchedules, setAvailableSchedules] = useState<Schedule[]>([]);
+  // Add error state
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -76,20 +78,20 @@ export default function DashboardPage() {
     }
   };
 
-  // Add useEffect to fetch data on component mount
-  useEffect(() => {
-    fetchAvailableSchedules();
-    fetchUpcomingExams();
-  }, []);
-
   // เพิ่ม useEffect สำหรับดึงข้อมูลตารางสอบที่สามารถเลือกได้
   const fetchAvailableSchedules = async () => {
     try {
+      setError(null); // Reset error state
       const response = await fetch('/api/schedules/available');
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch available schedules');
+        // Check for specific error message and set more user-friendly messages
+        if (data.error?.includes('ไม่พบข้อมูลผู้คุมสอบ') || 
+            data.error?.includes('ไม่มีสิทธิ์เข้าถึง')) {
+          throw new Error('ข้อมูลโปรไฟล์ไม่ครบถ้วนหรือไม่มีสิทธิ์การเข้าถึง กรุณาติดต่อผู้ดูแลระบบ');
+        }
+        throw new Error(data.error || 'ไม่สามารถโหลดรายการวิชาที่เปิดให้เลือกได้');
       }
   
       console.log('Available schedules:', data); // เพิ่ม log เพื่อ debug
@@ -104,9 +106,28 @@ export default function DashboardPage() {
       setAvailableSchedules(sortedSchedules);
     } catch (error) {
       console.error('Error fetching available schedules:', error);
-      toast.error('ไม่สามารถโหลดรายการวิชาที่เปิดให้เลือกได้');
+      // Customized error handling - ปรับการแสดง toast ให้แสดงเฉพาะกรณีที่ไม่ใช่ปัญหาเรื่องโปรไฟล์
+      const isProfileError = error instanceof Error && 
+        (error.message.includes('ไม่พบข้อมูลผู้คุมสอบ') || 
+         error.message.includes('ไม่มีสิทธิ์เข้าถึง') ||
+         error.message.includes('ข้อมูลโปรไฟล์ไม่ครบถ้วน'));
+  
+      if (isProfileError) {
+        setError('ข้อมูลโปรไฟล์ไม่ครบถ้วนหรือไม่มีสิทธิ์การเข้าถึง กรุณาติดต่อผู้ดูแลระบบ');
+        // ไม่แสดง toast สำหรับ error เกี่ยวกับโปรไฟล์
+      } else {
+        const errorMessage = error instanceof Error ? error.message : 'ไม่สามารถโหลดรายการวิชาที่เปิดให้เลือกได้';
+        setError(errorMessage);
+        toast.error(errorMessage);
+      }
     }
   };
+  
+  // Add useEffect to fetch data on component mount
+  useEffect(() => {
+    fetchAvailableSchedules();
+    fetchUpcomingExams();
+  }, []);
 
   // เพิ่ม function สำหรับเลือกตารางสอบ
   const handleSelectSchedule = async (scheduleId: string) => {
@@ -261,9 +282,65 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold text-gray-800">วิชาที่เปิดให้เลือกคุมสอบ</h2>
         </div>
         <div className="divide-y divide-gray-100">
-          {availableSchedules.length === 0 ? (
-            <div className="p-4 text-center text-gray-500">
-              ไม่พบวิชาที่เปิดให้เลือกคุมสอบในขณะนี้
+          {error ? (
+            <div className="p-6 text-center">
+              <div className="flex flex-col items-center justify-center space-y-4">
+                <div className="p-3 bg-red-100 text-red-700 rounded-full">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-medium text-gray-900">ไม่สามารถโหลดข้อมูลได้</h3>
+                  <p className="text-gray-500">{error}</p>
+                  
+                  {/* Add specific guidance for profile issues */}
+                  {error.includes('ข้อมูลโปรไฟล์') && (
+                    <div className="mt-4 p-4 bg-blue-50 text-blue-700 rounded-lg text-sm">
+                      <h4 className="font-semibold mb-2">คำแนะนำ:</h4>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>กรุณาตรวจสอบว่าบัญชีของคุณมีข้อมูลครบถ้วน</li>
+                        <li>อาจต้องรอการอนุมัติจากผู้ดูแลระบบ</li>
+                        <li>หากปัญหายังคงอยู่ กรุณาติดต่อฝ่ายทะเบียน</li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => fetchAvailableSchedules()}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    ลองใหม่อีกครั้ง
+                  </button>
+                  
+                  {/* Add profile button if it's a profile issue */}
+                  {error.includes('ข้อมูลโปรไฟล์') && (
+                    <button 
+                      onClick={() => router.push('/profile')}
+                      className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+                    >
+                      <Users className="w-4 h-4" />
+                      ไปที่โปรไฟล์
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : availableSchedules.length === 0 ? (
+            <div className="p-6 text-center">
+              <div className="flex flex-col items-center justify-center space-y-4">
+                <div className="p-3 bg-blue-100 text-blue-700 rounded-full">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-medium text-gray-900">ไม่พบวิชาที่เปิดให้เลือกคุมสอบในขณะนี้</h3>
+                  <p className="text-gray-500">อาจยังไม่มีการเปิดให้ลงทะเบียนคุมสอบ หรือคุณอาจได้ลงทะเบียนครบตามโควต้าแล้ว</p>
+                </div>
+              </div>
             </div>
           ) : (
             availableSchedules.map((schedule) => {

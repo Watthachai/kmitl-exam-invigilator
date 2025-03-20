@@ -77,12 +77,11 @@ export async function PUT(
         where: { id: appeal.scheduleId },
         data: {
           notes: status === 'APPROVED' ? 
-            `มีการร้องเรียนและได้รับการอนุมัติ: ${appeal.type === 'CHANGE_DATE' 
-              ? `ขอเปลี่ยนวันสอบ (วันที่ต้องการ: ${appeal.preferredDates.map(d => 
-                  new Date(d).toLocaleDateString('th-TH')).join(', ')})` 
-              : 'ขอหาผู้คุมสอบแทน'
-            }` : 
-            undefined
+            appeal.type === 'CHANGE_DATE' 
+              ? `ขอเปลี่ยนวันสอบ: (วันที่ต้องการ: ${appeal.preferredDates.map(d => 
+                  new Date(d).toLocaleDateString('th-TH')).join(', ')})`
+              : `หาผู้คุมสอบแทน: ${appeal.reason}` // แสดงเหตุผลสำหรับกรณีขอหาผู้คุมสอบแทน
+            : undefined
         }
       });
 

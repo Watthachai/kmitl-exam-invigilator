@@ -93,10 +93,12 @@ export default function AdminAppealsPage() {
         credentials: 'include',
         body: JSON.stringify({
           status: newStatus,
-          adminResponse
+          adminResponse,
+          type: selectedAppeal.type, // เพิ่ม type เข้าไปด้วย
+          reason: selectedAppeal.reason // เพิ่มเหตุผลเข้าไปด้วย
         }),
       });
-
+  
       if (!response.ok) {
         if (response.status === 401) {
           toast.error('กรุณาเข้าสู่ระบบ');
@@ -108,7 +110,7 @@ export default function AdminAppealsPage() {
         }
         throw new Error('Failed to update appeal');
       }
-
+  
       await response.json();
       toast.success('อัพเดทสถานะเรียบร้อย');
       setShowResponseModal(false);
