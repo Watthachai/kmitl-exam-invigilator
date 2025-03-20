@@ -376,7 +376,7 @@ function addAssignment(schedule: ExtendedSchedule, invigilator: ExtendedInvigila
     otherAssignments: invigilator.schedules.length > 0 ?
       invigilator.schedules
         .filter(s => s.id !== schedule.id)
-        .map(s => `${s.subjectGroup.subject.code} (${new Date(s.date).toLocaleDateString('th-TH')})`).join(", ") :
+        .map(s => `${s.subjectGroup?.subject?.code || 'ไม่ระบุรหัสวิชา'} (${new Date(s.date).toLocaleDateString('th-TH')})`).join(", ") :
       null
   });
 }

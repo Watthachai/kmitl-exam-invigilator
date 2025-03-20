@@ -9,6 +9,7 @@ import Highlight from "@/app/components/ui/highlight";
 import { ImSpinner8 } from "react-icons/im";
 import { FiDatabase } from "react-icons/fi";
 import { utils as XLSXUtils, write } from "xlsx";
+import  SearchableInvigilatorSelect from "@/app/components/ui/search-dropdown";
 
 interface SubjectGroup {
   id: string;
@@ -878,11 +879,10 @@ const handleRandomAssign = async () => {
 
 // ฟังก์ชันสำหรับเปลี่ยนผู้คุมสอบที่ถูกมอบหมาย
 const handleChangeAssignedInvigilator = (index: number) => {
-  // สร้าง Modal เพื่อให้เลือกผู้คุมสอบใหม่
   const assignment = previewAssignments[index];
-  let selectedInvigilatorId = "";
+  let selectedInvigilator: ExtendedInvigilator | null = null;
   
-  // สร้าง PopupModal สำหรับเลือกผู้คุมสอบใหม่
+  // สร้าง content สำหรับ PopupModal โดยใช้ SearchableInvigilatorSelect แทน select ธรรมดา
   const content = (
     <div className="space-y-4">
       <div className="bg-gray-50 p-3 rounded-md">
@@ -895,37 +895,15 @@ const handleChangeAssignedInvigilator = (index: number) => {
         <label className="block text-sm font-medium text-gray-700 mb-1">
           เลือกผู้คุมสอบใหม่
         </label>
-        <select
-          onChange={(e) => { selectedInvigilatorId = e.target.value; }}
-          className="w-full border border-gray-300 p-2 rounded-md"
-          defaultValue=""
-        >
-          <option value="" disabled>-- เลือกผู้คุมสอบใหม่ --</option>
-          
-          {/* กลุ่มอาจารย์ */}
-          <optgroup label="อาจารย์">
-            {invigilators
-              .filter((inv) => inv.isProfessor)
-              .map((invigilator) => (
-                <option key={invigilator.id} value={invigilator.id}>
-                  {invigilator.displayName || invigilator.name}{" "}
-                  (โควต้า: {invigilator.assignedQuota}/{invigilator.quota})
-                </option>
-              ))}
-          </optgroup>
-
-          {/* กลุ่มเจ้าหน้าที่ */}
-          <optgroup label="เจ้าหน้าที่">
-            {invigilators
-              .filter((inv) => !inv.isProfessor)
-              .map((invigilator) => (
-                <option key={invigilator.id} value={invigilator.id}>
-                  {invigilator.displayName || invigilator.name}{" "}
-                  (โควต้า: {invigilator.assignedQuota}/{invigilator.quota})
-                </option>
-              ))}
-          </optgroup>
-        </select>
+        <SearchableInvigilatorSelect
+          invigilators={invigilators}
+          selectedInvigilator={null}
+          onChange={(inv) => { 
+            // Cast the Invigilator to ExtendedInvigilator
+            selectedInvigilator = inv as ExtendedInvigilator | null; 
+          }}
+          placeholder="ค้นหาและเลือกผู้คุมสอบ..."
+        />
       </div>
     </div>
   );
@@ -942,17 +920,7 @@ const handleChangeAssignedInvigilator = (index: number) => {
           ยกเลิก
         </button>
         <button 
-          onClick={(e) => {
-            const selectElement = (e.target as HTMLElement).closest('.p-3')?.querySelector('select');
-            if (!selectElement) return;
-            
-            const selectedId = (selectElement as HTMLSelectElement).value;
-            if (!selectedId) return;
-            
-            const selectedInvigilator = invigilators.find(
-              inv => inv.id === selectedId
-            );
-            
+          onClick={() => {
             if (selectedInvigilator) {
               const updatedAssignments = [...previewAssignments];
               updatedAssignments[index] = {
@@ -969,11 +937,96 @@ const handleChangeAssignedInvigilator = (index: number) => {
               setPreviewAssignments(updatedAssignments);
               toast.dismiss(t.id);
               toast.success("อัพเดทผู้คุมสอบเรียบร้อย");
+            } else {
+              toast.error("กรุณาเลือกผู้คุมสอบ");
             }
           }}
-          disabled={!selectedInvigilatorId}
+          disabled={!selectedInvigilator}
           className={`px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md ${
-            selectedInvigilatorId ? 'hover:bg-blue-600' : 'opacity-50 cursor-not-allowed'
+            selectedInvigilator ? 'hover:bg-blue-600' : 'opacity-50 cursor-not-allowed'
+          }`}
+        >
+          บันทึก
+        </button>
+      </div>
+    </div>
+  ), { duration: Infinity });
+};
+
+// เพิ่มฟังก์ชันสำหรับมอบหมายผู้คุมสอบโดยตรงจากตาราง
+const handleQuickAssignInvigilator = (scheduleId: string) => {
+  // หา schedule ที่ต้องการแก้ไข
+  const schedule = schedules.find(s => s.id === scheduleId);
+  if (!schedule) return;
+
+  let selectedInvigilator: ExtendedInvigilator | null = null;
+  
+  toast((t) => (
+    <div className="p-3 max-w-md">
+      <div className="space-y-4">
+        <div className="bg-gray-50 p-3 rounded-md">
+          <h4 className="font-medium text-gray-800">เพิ่มผู้คุมสอบ</h4>
+          <p className="mt-1 text-sm">{`${schedule.subjectGroup.subject.code} - ${schedule.subjectGroup.subject.name}`}</p>
+          <p className="text-xs text-gray-500">{formatThaiDate(new Date(schedule.date))}, {schedule.scheduleDateOption}</p>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            เลือกผู้คุมสอบ
+          </label>
+          <SearchableInvigilatorSelect
+            invigilators={invigilators}
+            selectedInvigilator={null}
+            onChange={(inv) => { selectedInvigilator = inv; }}
+            placeholder="ค้นหาและเลือกผู้คุมสอบ..."
+          />
+        </div>
+      </div>
+      
+      <div className="mt-4 flex justify-end gap-2">
+        <button
+          onClick={() => toast.dismiss(t.id)}
+          className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md"
+        >
+          ยกเลิก
+        </button>
+        <button 
+          onClick={async () => {
+            if (!selectedInvigilator) {
+              toast.error("กรุณาเลือกผู้คุมสอบ");
+              return;
+            }
+            
+            try {
+              const response = await fetch(`/api/schedules/${schedule.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  subjectGroupId: schedule.subjectGroup.id,
+                  date: schedule.date,
+                  startTime: schedule.startTime,
+                  endTime: schedule.endTime,
+                  roomId: schedule.room.id,
+                  invigilatorId: selectedInvigilator.id,
+                  updateQuota: true,
+                }),
+              });
+              
+              if (response.ok) {
+                toast.dismiss(t.id);
+                toast.success("เพิ่มผู้คุมสอบสำเร็จ");
+                await Promise.all([fetchSchedules(), fetchInvigilators()]);
+              } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "ไม่สามารถเพิ่มผู้คุมสอบได้");
+              }
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาด");
+            }
+          }}
+          disabled={!selectedInvigilator}
+          className={`px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md ${
+            selectedInvigilator ? 'hover:bg-blue-600' : 'opacity-50 cursor-not-allowed'
           }`}
         >
           บันทึก
@@ -1399,6 +1452,12 @@ const handleChangeAssignedInvigilator = (index: number) => {
                           >
                             <FiTrash2 className="w-4 h-4" />
                           </button>
+                          <button
+                            onClick={() => handleQuickAssignInvigilator(schedule.id)}
+                            className="flex items-center gap-1 px-3 py-1 text-green-600 hover:bg-green-50 rounded-md transition-colors"
+                          >
+                            <FiEdit2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1508,25 +1567,17 @@ const handleChangeAssignedInvigilator = (index: number) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-gray-700">ผู้คุมสอบ</label>
-                    <select
-                      value={formData.invigilatorId}
-                      onChange={(e) =>
+                    <SearchableInvigilatorSelect
+                      invigilators={invigilators}
+                      selectedInvigilator={invigilators.find(inv => inv.id === formData.invigilatorId) || null}
+                      onChange={(selectedInv) => {
                         setFormData({
                           ...formData,
-                          invigilatorId: e.target.value,
-                        })
-                      }
-                      className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    >
-                      <option value="">เลือกผู้คุมสอบ</option>
-                      {invigilators.map((invigilator: ExtendedInvigilator) => (
-                        <option key={invigilator.id} value={invigilator.id}>
-                          {invigilator.name} (โควต้า:{" "}
-                          {invigilator.assignedQuota}/{invigilator.quota})
-                        </option>
-                      ))}
-                    </select>
+                          invigilatorId: selectedInv ? selectedInv.id : '',
+                        });
+                      }}
+                      placeholder="ค้นหาและเลือกผู้คุมสอบ..."
+                    />
                   </div>
                 </div>
               </div>
@@ -1570,56 +1621,27 @@ const handleChangeAssignedInvigilator = (index: number) => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-gray-700">ผู้คุมสอบ</label>
-                    <select
-                      value={editSchedule.invigilator?.id || ""}
-                      onChange={(e) => {
-                        const selectedInvigilator = invigilators.find(
-                          (inv) => inv.id === e.target.value
-                        );
-                        if (selectedInvigilator) {
-                          setEditSchedule({
-                            ...editSchedule,
-                            invigilator: {
-                              id: selectedInvigilator.id,
-                              name:
-                                selectedInvigilator.displayName ||
-                                selectedInvigilator.name,
-                              type: selectedInvigilator.type,
-                            },
-                          });
-                        }
+                    <label className="block text-gray-700 mb-1">ผู้คุมสอบ</label>
+                    <SearchableInvigilatorSelect
+                      invigilators={invigilators}
+                      selectedInvigilator={invigilators.find(inv => inv.id === editSchedule.invigilator?.id) || null}
+                      onChange={(selectedInv) => {
+                        setEditSchedule({
+                          ...editSchedule,
+                          invigilator: selectedInv ? {
+                            id: selectedInv.id,
+                            name: selectedInv.displayName || selectedInv.name,
+                            type: selectedInv.type,
+                          } : null,
+                        });
                       }}
-                      className="w-full border border-gray-300 p-2 rounded-md"
-                    >
-                      <option value="">เลือกผู้คุมสอบ</option>
-
-                      {/* กลุ่มอาจารย์ */}
-                      <optgroup label="อาจารย์">
-                        {invigilators
-                          .filter((inv) => inv.isProfessor)
-                          .map((invigilator) => (
-                            <option key={invigilator.id} value={invigilator.id}>
-                              {invigilator.displayName || invigilator.name}{" "}
-                              {!invigilator.id.startsWith("prof_") &&
-                                `(โควต้า: ${invigilator.assignedQuota}/${invigilator.quota})`}
-                            </option>
-                          ))}
-                      </optgroup>
-
-                      {/* กลุ่มเจ้าหน้าที่ */}
-                      <optgroup label="เจ้าหน้าที่">
-                        {invigilators
-                          .filter((inv) => !inv.isProfessor)
-                          .map((invigilator) => (
-                            <option key={invigilator.id} value={invigilator.id}>
-                              {invigilator.displayName || invigilator.name}{" "}
-                              (โควต้า: {invigilator.assignedQuota}/
-                              {invigilator.quota})
-                            </option>
-                          ))}
-                      </optgroup>
-                    </select>
+                      placeholder="ค้นหาและเลือกผู้คุมสอบ..."
+                    />
+                    {editSchedule.invigilator && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        ผู้คุมสอบที่เลือก: <span className="font-medium">{editSchedule.invigilator.name}</span>
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -2294,7 +2316,7 @@ const handleChangeAssignedInvigilator = (index: number) => {
               </p>
               
               {/* Add statistics section */}
-              <div className="mt-3 grid grid-cols-3 gap-4">
+              <div className="mt-3 grid grid-cols-4 gap-2">
                 <div className="bg-white rounded-md p-2 border border-green-100">
                   <p className="text-xs text-gray-500">จำนวนตารางสอบทั้งหมด</p>
                   <p className="text-lg font-bold">{previewAssignments.length} รายการ</p>
@@ -2309,6 +2331,14 @@ const handleChangeAssignedInvigilator = (index: number) => {
                   <p className="text-xs text-gray-500">จัดสรรให้บุคลากร</p>
                   <p className="text-lg font-bold text-purple-600">
                     {previewAssignments.filter(a => a.invigilatorType === 'บุคลากรทั่วไป').length} รายการ
+                  </p>
+                </div>
+                <div className="bg-white rounded-md p-2 border border-yellow-100">
+                  <p className="text-xs text-gray-500">เกณฑ์การจัดสรร</p>
+                  <p className="text-xs font-medium text-yellow-700">
+                    อาจารย์: {Math.floor(previewAssignments.length / invigilators.filter(i => i.type === 'อาจารย์').length || 1)} วิชา/คน
+                    <br/>
+                    เศษที่เหลือ: {previewAssignments.length % invigilators.filter(i => i.type === 'อาจารย์').length || 0} วิชา → บุคลากร
                   </p>
                 </div>
               </div>
@@ -2351,17 +2381,69 @@ const handleChangeAssignedInvigilator = (index: number) => {
                               <span className="ml-1 text-xs text-blue-600 bg-blue-100 px-1 py-0.5 rounded">ผู้สอน</span>
                             )}
                           </span>
-                          <div className="hidden group-hover:block absolute z-10 bg-white p-3 rounded-lg shadow-lg border border-gray-200 w-64 text-xs">
-                            <p className="font-bold">{assignment.newInvigilator}</p>
-                            <p className="mt-1">ตำแหน่ง: {assignment.invigilatorType}</p>
-                            <p>ภาควิชา: {assignment.invigilatorDepartment}</p>
-                            <p>โควต้า: {assignment.quotaUsed}/{assignment.quotaTotal}</p>
-                            {assignment.isTeachingFaculty && (
-                              <div className="mt-2 bg-blue-50 p-2 rounded border border-blue-200">
-                                <p className="font-semibold text-blue-700">⭐ อาจารย์ผู้สอนวิชานี้</p>
+
+                          {/* ปรับแต่ง tooltip ให้มีความโปร่งใสและเอฟเฟกต์ blur */}
+                          <div className="hidden group-hover:block absolute z-10 bg-white/80 backdrop-blur-lg p-4 rounded-xl shadow-lg border border-gray-200/50 w-72 text-sm transition-all duration-300 transform -translate-y-1">
+                            <div className="flex items-start gap-3">
+                              <div className={`p-2 rounded-full ${assignment.isTeachingFaculty ? 'bg-blue-100 text-blue-500' : 'bg-gray-100 text-gray-500'}`}>
+                                {assignment.isTeachingFaculty ? (
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838l-2.727 1.666c-.29.12-.5.41-.5.732V13a.5.5 0 00.5.5h2a.5.5 0 00.5-.5v-.25a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v.25a.5.5 0 00.5.5h2a.5.5 0 00.5-.5v-2.5a.5.5 0 00-.5-.5h-2a.5.5 0 01-.5-.5v-.5a.5.5 0 01.146-.354l2.5-2.5a.5.5 0 00.146-.354V8a.5.5 0 00-.5-.5H14a.5.5 0 01-.5-.5v-.5a.5.5 0 01.5-.5h1.5a1 1 0 001-1V4a1 1 0 00-1-1h-11z" />
+                                  </svg>
+                                ) : (
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                                  </svg>
+                                )}
                               </div>
-                            )}
-                            <p className="mt-1 text-gray-500">ตารางสอนอื่น: {assignment.otherAssignments || "ไม่มี"}</p>
+                              <div className="flex-1">
+                                <p className="font-bold text-gray-800">{assignment.newInvigilator}</p>
+                                <div className="mt-1 space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-gray-600 text-xs">ตำแหน่ง:</span>
+                                    <span className="font-medium text-gray-800">{assignment.invigilatorType}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-gray-600 text-xs">ภาควิชา:</span>
+                                    <span className="font-medium text-gray-800">{assignment.invigilatorDepartment}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-gray-600 text-xs">โควต้า:</span>
+                                    <div className="flex items-center">
+                                      <span className="font-medium text-gray-800">{assignment.quotaUsed}/{assignment.quotaTotal}</span>
+                                      <div className="ml-2 w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                        <div 
+                                          className={`h-full ${
+                                            assignment.quotaUsed / assignment.quotaTotal > 0.8 
+                                              ? 'bg-red-500' 
+                                              : assignment.quotaUsed / assignment.quotaTotal > 0.5 
+                                                ? 'bg-yellow-500' 
+                                                : 'bg-green-500'
+                                          }`} 
+                                          style={{ width: `${(assignment.quotaUsed / assignment.quotaTotal) * 100}%` }}
+                                        ></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {assignment.isTeachingFaculty && (
+                                  <div className="mt-3 bg-blue-50/70 p-2 rounded-lg border border-blue-200/70 flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+                                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                    </svg>
+                                    <p className="text-sm font-medium text-blue-700">อาจารย์ผู้สอนวิชานี้</p>
+                                  </div>
+                                )}
+
+                                {assignment.otherAssignments && (
+                                  <div className="mt-2 text-xs text-gray-500">
+                                    <p className="font-medium">ตารางสอนอื่น:</p>
+                                    <p className="mt-0.5">{assignment.otherAssignments}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -2369,9 +2451,11 @@ const handleChangeAssignedInvigilator = (index: number) => {
                       <td className="px-4 py-2">
                         <button 
                           onClick={() => handleChangeAssignedInvigilator(index)}
-                          className="text-blue-600 hover:text-blue-800"
+                          className="flex items-center gap-1 px-2 py-1 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                          title="เปลี่ยนผู้คุมสอบ"
                         >
-                          <FiEdit2 className="w-4 h-4" />
+                          <FiEdit2 className="w-3.5 h-3.5" /> 
+                          <span className="text-xs">เปลี่ยน</span>
                         </button>
                       </td>
                     </tr>
