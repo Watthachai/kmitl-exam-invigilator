@@ -17,6 +17,16 @@ interface PopupModalProps {
   confirmIcon?: React.ReactNode; // Add this prop
 }
 
+interface PopupModalProps {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+  onConfirm: () => void;
+  confirmIcon?: React.ReactNode;
+  maxWidth?: string;
+  confirmDisabled?: boolean;
+}
+
 export default function PopupModal({
   title,
   onClose,

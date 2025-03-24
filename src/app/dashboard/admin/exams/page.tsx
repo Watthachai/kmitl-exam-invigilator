@@ -81,6 +81,27 @@ interface ExtendedInvigilator extends Invigilator {
   quota: number;
   displayName?: string;
   isProfessor?: boolean;
+  department?: {
+    name: string;
+  };
+}
+
+interface AssignmentPreview {
+  id: string;
+  date: string | Date;
+  timeSlot: string;
+  subjectCode: string;
+  subjectName: string;
+  department: string;
+  currentInvigilator?: string;
+  newInvigilator: string;
+  newInvigilatorId: string;
+  invigilatorType?: string;
+  invigilatorDepartment?: string;
+  quotaUsed: number;
+  quotaTotal: number;
+  isTeachingFaculty: boolean;
+  otherAssignments?: string;
 }
 
 type SortKey = keyof Schedule | "subjectGroup.subject.department.name";
@@ -111,6 +132,13 @@ const formatThaiDate = (date: Date) => {
 };
 
 export default function ExamsPage() {
+  const [showEditInvigilatorModal, setShowEditInvigilatorModal] = useState(false);
+  const [selectedInvForEdit, setSelectedInvForEdit] = useState<ExtendedInvigilator | null>(null);
+  const [currentEditIndex, setCurrentEditIndex] = useState<number | null>(null);
+
+  const [showQuickAssignModal, setShowQuickAssignModal] = useState(false);
+  const [selectedInvForQuickAssign, setSelectedInvForQuickAssign] = useState<ExtendedInvigilator | null>(null);
+  const [currentScheduleId, setCurrentScheduleId] = useState<string | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -561,7 +589,6 @@ export default function ExamsPage() {
       for (const schedule of previewData) {
         // หาชื่ออาจารย์จาก invigilator ที่เชื่อมกับ professor (ถ้ามี)
         let invigilatorName = schedule.invigilator?.name || "-";
-        const invigilatorType = schedule.invigilator?.type || "-";
         let firstName = "-";
         let lastName = "-";
         let prefix = "-";
@@ -814,7 +841,7 @@ export default function ExamsPage() {
     excludeAlreadyAssigned: true,
     respectTimeConstraints: true
   });
-  const [previewAssignments, setPreviewAssignments] = useState<any[]>([]);
+  const [previewAssignments, setPreviewAssignments] = useState<AssignmentPreview[]>([]);
 
   // ฟังก์ชันสำหรับสุ่มและจัดสรรผู้คุมสอบ
 const handleRandomAssign = async () => {
@@ -877,163 +904,18 @@ const handleRandomAssign = async () => {
   }
 };
 
-// ฟังก์ชันสำหรับเปลี่ยนผู้คุมสอบที่ถูกมอบหมาย
+// แก้ไขฟังก์ชัน handleChangeAssignedInvigilator 
 const handleChangeAssignedInvigilator = (index: number) => {
-  const assignment = previewAssignments[index];
-  let selectedInvigilator: ExtendedInvigilator | null = null;
-  
-  // สร้าง content สำหรับ PopupModal โดยใช้ SearchableInvigilatorSelect แทน select ธรรมดา
-  const content = (
-    <div className="space-y-4">
-      <div className="bg-gray-50 p-3 rounded-md">
-        <p className="font-medium text-gray-700">กำลังแก้ไขผู้คุมสอบสำหรับ:</p>
-        <p className="mt-1">{`${assignment.subjectCode} - ${assignment.subjectName}`}</p>
-        <p className="text-sm text-gray-500">{formatThaiDate(new Date(assignment.date))}, {assignment.timeSlot}</p>
-      </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          เลือกผู้คุมสอบใหม่
-        </label>
-        <SearchableInvigilatorSelect
-          invigilators={invigilators}
-          selectedInvigilator={null}
-          onChange={(inv) => { 
-            // Cast the Invigilator to ExtendedInvigilator
-            selectedInvigilator = inv as ExtendedInvigilator | null; 
-          }}
-          placeholder="ค้นหาและเลือกผู้คุมสอบ..."
-        />
-      </div>
-    </div>
-  );
-  
-  // สร้าง Modal และแสดงผล
-  toast((t) => (
-    <div className="p-3">
-      {content}
-      <div className="mt-4 flex justify-end gap-2">
-        <button
-          onClick={() => toast.dismiss(t.id)}
-          className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md"
-        >
-          ยกเลิก
-        </button>
-        <button 
-          onClick={() => {
-            if (selectedInvigilator) {
-              const updatedAssignments = [...previewAssignments];
-              updatedAssignments[index] = {
-                ...updatedAssignments[index],
-                newInvigilatorId: selectedInvigilator.id,
-                newInvigilator: selectedInvigilator.displayName || selectedInvigilator.name,
-                invigilatorType: selectedInvigilator.type,
-                invigilatorDepartment: selectedInvigilator.department?.name || "-",
-                quotaUsed: selectedInvigilator.assignedQuota,
-                quotaTotal: selectedInvigilator.quota,
-                isTeachingFaculty: false // อาจต้องตรวจสอบเพิ่มเติม
-              };
-              
-              setPreviewAssignments(updatedAssignments);
-              toast.dismiss(t.id);
-              toast.success("อัพเดทผู้คุมสอบเรียบร้อย");
-            } else {
-              toast.error("กรุณาเลือกผู้คุมสอบ");
-            }
-          }}
-          disabled={!selectedInvigilator}
-          className={`px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md ${
-            selectedInvigilator ? 'hover:bg-blue-600' : 'opacity-50 cursor-not-allowed'
-          }`}
-        >
-          บันทึก
-        </button>
-      </div>
-    </div>
-  ), { duration: Infinity });
+  setCurrentEditIndex(index);
+  setSelectedInvForEdit(null); // รีเซ็ตค่าเลือกผู้คุมสอบก่อนแสดง Modal
+  setShowEditInvigilatorModal(true);
 };
 
-// เพิ่มฟังก์ชันสำหรับมอบหมายผู้คุมสอบโดยตรงจากตาราง
+// แก้ไขฟังก์ชัน handleQuickAssignInvigilator
 const handleQuickAssignInvigilator = (scheduleId: string) => {
-  // หา schedule ที่ต้องการแก้ไข
-  const schedule = schedules.find(s => s.id === scheduleId);
-  if (!schedule) return;
-
-  let selectedInvigilator: ExtendedInvigilator | null = null;
-  
-  toast((t) => (
-    <div className="p-3 max-w-md">
-      <div className="space-y-4">
-        <div className="bg-gray-50 p-3 rounded-md">
-          <h4 className="font-medium text-gray-800">เพิ่มผู้คุมสอบ</h4>
-          <p className="mt-1 text-sm">{`${schedule.subjectGroup.subject.code} - ${schedule.subjectGroup.subject.name}`}</p>
-          <p className="text-xs text-gray-500">{formatThaiDate(new Date(schedule.date))}, {schedule.scheduleDateOption}</p>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            เลือกผู้คุมสอบ
-          </label>
-          <SearchableInvigilatorSelect
-            invigilators={invigilators}
-            selectedInvigilator={null}
-            onChange={(inv) => { selectedInvigilator = inv; }}
-            placeholder="ค้นหาและเลือกผู้คุมสอบ..."
-          />
-        </div>
-      </div>
-      
-      <div className="mt-4 flex justify-end gap-2">
-        <button
-          onClick={() => toast.dismiss(t.id)}
-          className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md"
-        >
-          ยกเลิก
-        </button>
-        <button 
-          onClick={async () => {
-            if (!selectedInvigilator) {
-              toast.error("กรุณาเลือกผู้คุมสอบ");
-              return;
-            }
-            
-            try {
-              const response = await fetch(`/api/schedules/${schedule.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  subjectGroupId: schedule.subjectGroup.id,
-                  date: schedule.date,
-                  startTime: schedule.startTime,
-                  endTime: schedule.endTime,
-                  roomId: schedule.room.id,
-                  invigilatorId: selectedInvigilator.id,
-                  updateQuota: true,
-                }),
-              });
-              
-              if (response.ok) {
-                toast.dismiss(t.id);
-                toast.success("เพิ่มผู้คุมสอบสำเร็จ");
-                await Promise.all([fetchSchedules(), fetchInvigilators()]);
-              } else {
-                const errorData = await response.json();
-                throw new Error(errorData.error || "ไม่สามารถเพิ่มผู้คุมสอบได้");
-              }
-            } catch (error) {
-              toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาด");
-            }
-          }}
-          disabled={!selectedInvigilator}
-          className={`px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md ${
-            selectedInvigilator ? 'hover:bg-blue-600' : 'opacity-50 cursor-not-allowed'
-          }`}
-        >
-          บันทึก
-        </button>
-      </div>
-    </div>
-  ), { duration: Infinity });
+  setCurrentScheduleId(scheduleId);
+  setSelectedInvForQuickAssign(null); // รีเซ็ตค่าเลือกผู้คุมสอบก่อนแสดง Modal
+  setShowQuickAssignModal(true);
 };
 
   return (
@@ -1630,9 +1512,9 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
                           ...editSchedule,
                           invigilator: selectedInv ? {
                             id: selectedInv.id,
-                            name: selectedInv.displayName || selectedInv.name,
+                            name: selectedInv.displayName || selectedInv.name || '',
                             type: selectedInv.type,
-                          } : null,
+                          } : undefined,
                         });
                       }}
                       placeholder="ค้นหาและเลือกผู้คุมสอบ..."
@@ -2388,7 +2270,7 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
                               <div className={`p-2 rounded-full ${assignment.isTeachingFaculty ? 'bg-blue-100 text-blue-500' : 'bg-gray-100 text-gray-500'}`}>
                                 {assignment.isTeachingFaculty ? (
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                    <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838l-2.727 1.666c-.29.12-.5.41-.5.732V13a.5.5 0 00.5.5h2a.5.5 0 00.5-.5v-.25a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v.25a.5.5 0 00.5.5h2a.5.5 0 00.5-.5v-2.5a.5.5 0 00-.5-.5h-2a.5.5 0 01-.5-.5v-.5a.5.5 0 01.146-.354l2.5-2.5a.5.5 0 00.146-.354V8a.5.5 0 00-.5-.5H14a.5.5 0 01-.5-.5v-.5a.5.5 0 01.5-.5h1.5a1 1 0 001-1V4a1 1 0 00-1-1h-11z" />
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                                   </svg>
                                 ) : (
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -2410,17 +2292,18 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
                                   <div className="flex items-center justify-between">
                                     <span className="text-gray-600 text-xs">โควต้า:</span>
                                     <div className="flex items-center">
-                                      <span className="font-medium text-gray-800">{assignment.quotaUsed}/{assignment.quotaTotal}</span>
+                                      {/* แสดงโควต้าที่จะเป็นหลังจากมอบหมาย (บวก 1) */}
+                                      <span className="font-medium text-gray-800">{assignment.quotaUsed + 1}/{assignment.quotaTotal}</span>
                                       <div className="ml-2 w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
                                         <div 
                                           className={`h-full ${
-                                            assignment.quotaUsed / assignment.quotaTotal > 0.8 
+                                            (assignment.quotaUsed + 1) / assignment.quotaTotal > 0.8 
                                               ? 'bg-red-500' 
-                                              : assignment.quotaUsed / assignment.quotaTotal > 0.5 
+                                              : (assignment.quotaUsed + 1) / assignment.quotaTotal > 0.5 
                                                 ? 'bg-yellow-500' 
                                                 : 'bg-green-500'
                                           }`} 
-                                          style={{ width: `${(assignment.quotaUsed / assignment.quotaTotal) * 100}%` }}
+                                          style={{ width: `${((assignment.quotaUsed + 1) / assignment.quotaTotal) * 100}%` }}
                                         ></div>
                                       </div>
                                     </div>
@@ -2447,7 +2330,24 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-2">{`${assignment.quotaUsed}/${assignment.quotaTotal}`}</td>
+                      <td className="px-4 py-2">
+                        {/* แสดงโควต้าในตารางให้บวก 1 ไปด้วย */}
+                        <div className="flex items-center">
+                          <span className="font-medium">{assignment.quotaUsed + 1}/{assignment.quotaTotal}</span>
+                          <div className="ml-2 w-10 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${
+                                (assignment.quotaUsed + 1) / assignment.quotaTotal > 0.8 
+                                  ? 'bg-red-500' 
+                                  : (assignment.quotaUsed + 1) / assignment.quotaTotal > 0.5 
+                                    ? 'bg-yellow-500' 
+                                    : 'bg-green-500'
+                              }`} 
+                              style={{ width: `${((assignment.quotaUsed + 1) / assignment.quotaTotal) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-4 py-2">
                         <button 
                           onClick={() => handleChangeAssignedInvigilator(index)}
@@ -2477,6 +2377,138 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
         )}
       </PopupModal>
     )}
+    {/* Modal สำหรับเปลี่ยนผู้คุมสอบในการมอบหมายแบบสุ่ม */}
+{showEditInvigilatorModal && currentEditIndex !== null && (
+  <PopupModal
+    title="แก้ไขผู้คุมสอบ"
+    onClose={() => {
+      setShowEditInvigilatorModal(false);
+      setSelectedInvForEdit(null);
+    }}
+    onConfirm={() => {
+      if (!selectedInvForEdit || currentEditIndex === null) return;
+      
+      const updatedAssignments = [...previewAssignments];
+      updatedAssignments[currentEditIndex] = {
+        ...updatedAssignments[currentEditIndex],
+        newInvigilatorId: selectedInvForEdit.id,
+        newInvigilator: selectedInvForEdit.displayName || selectedInvForEdit.name || '',
+        invigilatorType: selectedInvForEdit.type || '',
+        invigilatorDepartment: selectedInvForEdit.department?.name || "-",
+        quotaUsed: selectedInvForEdit.assignedQuota || 0,
+        quotaTotal: selectedInvForEdit.quota || 0,
+        isTeachingFaculty: false
+      };
+      
+      setPreviewAssignments(updatedAssignments);
+      setShowEditInvigilatorModal(false);
+      toast.success("อัพเดทผู้คุมสอบเรียบร้อย");
+    }}
+    confirmText="บันทึกการเปลี่ยนแปลง"
+    confirmDisabled={!selectedInvForEdit}
+  >
+    <div className="space-y-4">
+      <div className="bg-gray-50 p-4 rounded-md">
+        <p className="font-medium text-gray-700">กำลังแก้ไขผู้คุมสอบสำหรับ:</p>
+        <p className="mt-1 text-base">
+          {`${previewAssignments[currentEditIndex].subjectCode} - ${previewAssignments[currentEditIndex].subjectName}`}
+        </p>
+        <p className="text-sm text-gray-500">
+          {formatThaiDate(new Date(previewAssignments[currentEditIndex].date))}, 
+          {previewAssignments[currentEditIndex].timeSlot}
+        </p>
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          เลือกผู้คุมสอบใหม่
+        </label>
+        <SearchableInvigilatorSelect
+          invigilators={invigilators}
+          selectedInvigilator={selectedInvForEdit}
+          onChange={(inv) => { setSelectedInvForEdit(inv as ExtendedInvigilator | null); }}
+          placeholder="ค้นหาและเลือกผู้คุมสอบ..."
+        />
+      </div>
+    </div>
+  </PopupModal>
+)}
+
+  {/* Modal สำหรับเพิ่มผู้คุมสอบในตารางสอบที่มีอยู่ */}
+  {showQuickAssignModal && currentScheduleId && (
+    <PopupModal
+      title="เพิ่มผู้คุมสอบ"
+      onClose={() => {
+        setShowQuickAssignModal(false);
+        setSelectedInvForQuickAssign(null);
+      }}
+      onConfirm={async () => {
+        if (!selectedInvForQuickAssign || !currentScheduleId) return;
+        const currentSchedule = schedules.find(s => s.id === currentScheduleId);
+        if (!currentSchedule) return;
+        
+        try {
+          const response = await fetch(`/api/schedules/${currentScheduleId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subjectGroupId: currentSchedule.subjectGroup.id,
+              date: currentSchedule.date,
+              startTime: currentSchedule.startTime,
+              endTime: currentSchedule.endTime,
+              roomId: currentSchedule.room.id,
+              invigilatorId: selectedInvForQuickAssign.id,
+              updateQuota: true,
+            }),
+          });
+          
+          if (response.ok) {
+            setShowQuickAssignModal(false);
+            toast.success("เพิ่มผู้คุมสอบสำเร็จ");
+            await Promise.all([fetchSchedules(), fetchInvigilators()]);
+          } else {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "ไม่สามารถเพิ่มผู้คุมสอบได้");
+          }
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาด");
+        }
+      }}
+      confirmText="บันทึก"
+      confirmDisabled={!selectedInvForQuickAssign}
+    >
+      <div className="space-y-4">
+        <div className="bg-gray-50 p-4 rounded-md">
+          <h4 className="font-medium text-gray-800">รายละเอียดตารางสอบ</h4>
+          {(() => {
+            const schedule = schedules.find(s => s.id === currentScheduleId);
+            if (!schedule) return <p>ไม่พบข้อมูล</p>;
+            
+            return (
+              <>
+                <p className="mt-1">{`${schedule.subjectGroup.subject.code} - ${schedule.subjectGroup.subject.name}`}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {formatThaiDate(new Date(schedule.date))}, {schedule.scheduleDateOption}
+                </p>
+              </>
+            );
+          })()}
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            เลือกผู้คุมสอบ
+          </label>
+          <SearchableInvigilatorSelect
+            invigilators={invigilators}
+            selectedInvigilator={selectedInvForQuickAssign}
+            onChange={(inv) => { setSelectedInvForQuickAssign(inv as ExtendedInvigilator | null); }}
+            placeholder="ค้นหาและเลือกผู้คุมสอบ..."
+          />
+        </div>
+      </div>
+    </PopupModal>
+  )}
     </div>
   );
 }
