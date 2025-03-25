@@ -7,9 +7,8 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma generate && prisma migrate deploy && next build",
-    "db:migrate": "prisma migrate dev",
-    "prisma:baseline": "prisma migrate reset --skip-generate --skip-seed --force"
+    "vercel-build": "prisma generate && next build",
+    "db:migrate": "prisma migrate dev"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.0",
