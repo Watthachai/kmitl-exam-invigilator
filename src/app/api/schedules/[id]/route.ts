@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import prisma from '@/app/lib/prisma';
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(
+    request: Request, 
+    { params }: { params: Promise<{ id: string }> }
+) {
     try {
-        const { id } = params;
+        const { id } = await params; // Need to await the params Promise
         const body = await request.json();
         
         const { previousInvigilatorId, subjectGroupId, roomId, invigilatorId, updateQuota, ...otherData } = body;
         let updateQuotaFlag = updateQuota;
         let finalInvigilatorId = invigilatorId;
-        
+         
         // ตรวจสอบว่าเป็น ID อาจารย์หรือไม่
         const isProfessorId = invigilatorId?.toString().startsWith('prof_');
         
@@ -67,7 +70,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
             });
         }
         
-        // อัปเดตตารางสอบ - ใช้ connect แทนการกำหนดค่า ID โดยตรง
+        // อัปเดตตารางสอบ
         const updatedSchedule = await prisma.schedule.update({
             where: { id },
             data: {
