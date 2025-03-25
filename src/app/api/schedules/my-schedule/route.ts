@@ -76,7 +76,7 @@ export async function POST(request: Request) {
   try {
     // ตรวจสอบ session
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    if (!session?.user || !session.user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -96,18 +96,21 @@ export async function POST(request: Request) {
     const body = await request.json();
     
     if (!body?.subjectGroupId || !body?.date || !body?.startTime || 
-        !body?.endTime || !body?.roomId || !body?.invigilatorId) {
+        !body?.endTime || !body?.roomId || !body?.invigilatorId || 
+        !body?.examType || !body?.academicYear || !body?.semester) {
       return NextResponse.json({ 
         error: 'Missing required fields' 
       }, { status: 400 });
     }
-
     const schedule = await prisma.schedule.create({
       data: {
         date: new Date(body.date),
         startTime: new Date(body.startTime),
         endTime: new Date(body.endTime),
         scheduleDateOption: 'FINAL',
+        examType: body.examType || 'FINAL',
+        academicYear: body.academicYear || new Date().getFullYear(),
+        semester: body.semester || 1,
         subjectGroup: { connect: { id: body.subjectGroupId } },
         room: { connect: { id: body.roomId } },
         invigilator: { connect: { id: body.invigilatorId } }
