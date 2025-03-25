@@ -9,8 +9,9 @@
     }
   ],
   "env": {
-    "DATABASE_URL": "@database_url",
+    "DATABASE_URL": "postgres://neondb_owner:dwVyPicZ5US7@ep-winter-leaf-a1n5ur8d-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+    ,
     "NEXTAUTH_URL": "https://kmitl-exam-invigilator.vercel.app",
-    "NEXTAUTH_SECRET": "@nextauth_secret"
+    "AUTH_SECRET": "y0PATHjhxq9Ufn3B40/xpXekoZXUY9ra/EP6kmfpnnU="
   }
 }
