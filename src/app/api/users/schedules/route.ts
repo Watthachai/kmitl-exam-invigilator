@@ -11,20 +11,22 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get user's invigilator ID if it exists
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: { invigilator: true }
+    });
+
+    if (!user?.invigilator) {
+      return NextResponse.json({ error: 'User is not an invigilator' }, { status: 400 });
+    }
+
+    // Find schedules where the user's invigilator ID matches
     const schedules = await prisma.schedule.findMany({
       where: {
-        invigilators: {
-          some: {
-            id: session.user.id
-          }
-        }
+        invigilatorId: user.invigilator.id
       },
-      select: {
-        id: true,
-        date: true,
-        scheduleDateOption: true,
-        startTime: true,
-        endTime: true,
+      include: {
         room: {
           select: {
             building: true,
@@ -32,7 +34,7 @@ export async function GET() {
           }
         },
         subjectGroup: {
-          select: {
+          include: {
             subject: {
               select: {
                 code: true,
@@ -41,16 +43,11 @@ export async function GET() {
             }
           }
         },
-        invigilators: {
+        invigilator: {
           select: {
             id: true,
             name: true,
-            role: true,
-            invigilator: {
-              select: {
-                type: true
-              }
-            }
+            type: true
           }
         }
       },
@@ -63,12 +60,9 @@ export async function GET() {
     const transformedSchedules = schedules.map(schedule => ({
       id: schedule.id,
       date: schedule.date.toISOString(),
-      startTime: schedule.scheduleDateOption === 'MORNING' 
-        ? new Date(schedule.date.setHours(9, 30, 0)).toISOString()
-        : new Date(schedule.date.setHours(13, 30, 0)).toISOString(),
-      endTime: schedule.scheduleDateOption === 'MORNING'
-        ? new Date(schedule.date.setHours(12, 30, 0)).toISOString()
-        : new Date(schedule.date.setHours(16, 30, 0)).toISOString(),
+      startTime: schedule.startTime.toISOString(),
+      endTime: schedule.endTime.toISOString(),
+      scheduleDateOption: schedule.scheduleDateOption,
       room: {
         building: schedule.room.building,
         roomNumber: schedule.room.roomNumber
@@ -79,11 +73,13 @@ export async function GET() {
           name: schedule.subjectGroup.subject.name
         }
       },
-      invigilators: schedule.invigilators.map(user => ({
-        id: user.id,
-        name: user.name,
-        role: user.role
-      }))
+      invigilators: [
+        {
+          id: schedule.invigilator?.id || '',
+          name: schedule.invigilator?.name || '',
+          type: schedule.invigilator?.type || ''
+        }
+      ]
     }));
 
     return NextResponse.json(transformedSchedules);
