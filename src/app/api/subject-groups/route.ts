@@ -7,6 +7,11 @@ export async function GET() {
       include: {
         subject: true,
         professor: true,
+        additionalProfessors: {
+          include: {
+            professor: true
+          }
+        }
       },
     });
     return NextResponse.json(subjectGroups);

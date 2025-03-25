@@ -6,44 +6,77 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Button } from "@/app/components/ui/button";
 import { Icons } from "@/app/components/ui/icons";
+import { NetworkError } from "@/components/network-error";
+import Loading from "@/app/loading";
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [previousSession, setPreviousSession] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
   const router = useRouter();
   const { status, data: session } = useSession();
 
+  // Handle session and routing
   useEffect(() => {
-    // Check for existing session token
-    const sessionToken = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('next-auth.session-token'));
+    if (status === "authenticated") {
+      const redirectPath = session?.user?.role === "admin" ? "/dashboard/admin" : "/dashboard";
+      router.replace(redirectPath); // Use replace instead of push
+      return;
+    }
     
-    if (sessionToken) {
-      setPreviousSession(sessionToken);
+    // Only check for previous session if not authenticated
+    if (status === "unauthenticated") {
+      const sessionToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('next-auth.session-token'));
+      
+      if (sessionToken) {
+        setPreviousSession(sessionToken);
+      }
     }
-  }, []);
+  }, [status, session, router]);
 
-  useEffect(() => {
-    if (status === 'authenticated') {
-      const redirectTimeout = setTimeout(() => {
-        router.push('/dashboard');
-      }, 2000); // Delay redirect for 2 seconds to show welcome message
-
-      return () => clearTimeout(redirectTimeout);
-    }
-  }, [status, router]);
-
+  // Handle Google login
   const handleGoogleLogin = async () => {
-    setIsLoading(true);
     try {
-      await signIn('google');
-    } catch {
-      console.error('เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
+      setIsLoading(true);
+      await signIn('google', { 
+        redirect: false
+      });
+    } catch (error) {
+      if (!navigator.onLine) {
+        setIsOffline(true);
+      }
+      console.error('Login error:', error);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Handle network status
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    // Check initial status
+    if (typeof window !== 'undefined') {
+      setIsOffline(!window.navigator.onLine);
+    }
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  if (isOffline) return <NetworkError />;
+
+  if (status === 'loading') {
+    return <Loading />;
+  }
 
   if (status === 'authenticated' && session?.user) {
     return (

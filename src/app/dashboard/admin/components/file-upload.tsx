@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
 import { storage } from '@/app/lib/storage';
@@ -10,17 +10,13 @@ const STORAGE_KEYS = {
 
 interface FileUploadProps {
   onFileUpload: (file: File) => void;
+  onClear?: () => void;
   defaultFileName?: string;
 }
 
 export const FileUpload = ({ onFileUpload, defaultFileName = '' }: FileUploadProps) => {
   const [fileName, setFileName] = useState(defaultFileName);
 
-  // Load saved filename on mount
-  useEffect(() => {
-    const savedFileName = storage.get(STORAGE_KEYS.FILE_NAME);
-    if (savedFileName) setFileName(savedFileName);
-  }, []);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles?.length > 0) {
@@ -50,55 +46,89 @@ export const FileUpload = ({ onFileUpload, defaultFileName = '' }: FileUploadPro
   });
 
   return (
-    <div className="relative">
+    <div className="relative w-full">
       <div
         {...getRootProps()}
         className={`
-          flex items-center justify-center gap-3 px-6 py-4
-          border-2 border-dashed rounded-lg cursor-pointer
-          transition-all duration-200 ease-in-out
-          ${fileName ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-blue-400'}
-          ${isDragActive ? 'border-blue-400 bg-blue-50 scale-105' : ''}
+          flex flex-col sm:flex-row items-center justify-center gap-1 p-1
+          border-2 border-dashed rounded-xl cursor-pointer
+          transition-all duration-300 ease-out
+          hover:shadow-lg hover:border-blue-400/50
+          ${fileName ? 'border-green-300 bg-green-50/80' : 'border-gray-300'}
+          ${isDragActive ? 'border-blue-400 bg-blue-50/80 scale-[1.02] shadow-xl' : ''}
+          relative overflow-hidden group
         `}
       >
         <input {...getInputProps()} />
         
-        <svg 
-          className={`w-6 h-6 ${fileName ? 'text-green-500' : 'text-gray-400'}`}
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24"
-        >
-          {fileName ? (
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={2} 
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" 
-            />
-          ) : (
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={2}
-              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" 
-            />
-          )}
-        </svg>
+        {/* Background pattern */}
+        <div className="absolute inset-0 opacity-5 pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500" />
+          <div className="absolute inset-0 bg-grid-pattern" />
+        </div>
 
-        <div className="flex flex-col items-center">
-          <span className={`text-sm ${fileName ? 'text-green-600' : 'text-gray-600'}`}>
+        {/* Icon Section */}
+        <div className={`
+          relative w-8 h-8 flex items-center justify-center
+          rounded-full transition-all duration-300
+          ${fileName ? 'bg-green-100' : 'bg-gray-100'}
+          ${isDragActive ? 'scale-110 bg-blue-100' : ''}
+          group-hover:scale-110
+        `}>
+          <svg 
+            className={`
+              w-5 h-5 transition-all duration-300
+              ${fileName ? 'text-green-500' : 'text-gray-400'}
+              ${isDragActive ? 'text-blue-500 scale-110' : ''}
+              group-hover:scale-110
+            `}
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            {fileName ? (
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" 
+              />
+            ) : (
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" 
+              />
+            )}
+          </svg>
+        </div>
+
+        {/* Text Content */}
+        <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
+          <span className={`
+            text-base sm:text-lg font-medium transition-colors duration-300
+            ${fileName ? 'text-green-600' : 'text-gray-700'}
+          `}>
             {fileName 
               ? `ไฟล์ที่เลือก: ${fileName}`
               : 'คลิกหรือลากไฟล์มาวาง'
             }
           </span>
           {!fileName && (
-            <span className="text-xs text-gray-400 mt-1">
-              รองรับไฟล์ .xlsx และ .xls
+            <span className="text-sm text-gray-400 mt-1">
+              รองรับไฟล์ .xlsx และ .xls (ไม่เกิน 5MB)
             </span>
           )}
         </div>
+
+
+        {/* Progress Indicator for Drag */}
+        <div className={`
+          absolute bottom-0 left-0 h-1 bg-blue-500
+          transition-all duration-300 ease-out
+          ${isDragActive ? 'w-full' : 'w-0'}
+        `} />
       </div>
     </div>
   );

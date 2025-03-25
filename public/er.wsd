@@ -1,0 +1,175 @@
+@startuml KMITL Exam Invigilator System - Entity Relationship
+
+' Layout settings
+skinparam linetype ortho
+skinparam nodesep 80
+skinparam ranksep 100
+skinparam padding 10
+skinparam roundcorner 15
+skinparam ClassBackgroundColor LightCyan
+skinparam ClassBorderColor DarkSlateGray
+skinparam ArrowColor Navy
+
+' Group Authentication
+together {
+  entity "User" as User {
+    *id : String <<PK>>
+    name : String
+    email : String <<unique>>
+    emailVerified : DateTime
+    image : String
+    role : String
+  }
+
+  entity "Account" as Account {
+    *id : String <<PK>>
+    *userId : String <<FK>>
+    provider : String
+    providerAccountId : String
+    access_token : String
+  }
+
+  entity "Session" as Session {
+    *id : String <<PK>>
+    sessionToken : String
+    *userId : String <<FK>>
+    expires : DateTime
+  }
+
+  entity "VerificationToken" as VerificationToken {
+    *id : Int <<PK>>
+    identifier : String
+    token : String <<unique>>
+    expires : DateTime
+  }
+}
+
+' Group Departments & Staff
+together {
+  entity "Department" as Department {
+    *id : String <<PK>>
+    name : String <<unique>>
+    code : String <<unique>>
+    quota : Int
+    usedQuota : Int
+  }
+
+  entity "Professor" as Professor {
+    *id : String <<PK>>
+    name : String <<unique>>
+    *departmentId : String <<FK>>
+    userId : String <<FK>>
+  }
+
+  entity "Invigilator" as Invigilator {
+    *id : String <<PK>>
+    name : String
+    type : String
+    *departmentId : String <<FK>>
+    professorId : String <<FK>>
+    userId : String <<FK>>
+    quota : Int
+    assignedQuota : Int
+  }
+}
+
+' Group Subjects
+together {
+  entity "Subject" as Subject {
+    *id : String <<PK>>
+    code : String <<unique>>
+    name : String
+    *departmentId : String <<FK>>
+    isGenEd : Boolean
+  }
+
+  entity "SubjectGroup" as SubjectGroup {
+    *id : String <<PK>>
+    groupNumber : String
+    year : Int
+    studentCount : Int
+    *subjectId : String <<FK>>
+    *professorId : String <<FK>>
+  }
+
+  entity "SubjectGroupProfessor" as SubjectGroupProfessor {
+    *id : String <<PK>>
+    *subjectGroupId : String <<FK>>
+    *professorId : String <<FK>>
+  }
+}
+
+' Group Examination
+together {
+  entity "Room" as Room {
+    *id : String <<PK>>
+    building : String
+    roomNumber : String
+  }
+
+  entity "Schedule" as Schedule {
+    *id : String <<PK>>
+    date : DateTime
+    startTime : DateTime
+    endTime : DateTime
+    examType : String
+    *roomId : String <<FK>>
+    *subjectGroupId : String <<FK>>
+    invigilatorId : String <<FK>>
+    priority : Boolean
+    isGenEd : Boolean
+    quotaFilled : Boolean
+    departmentQuota : Int
+  }
+
+  entity "Appeal" as Appeal {
+    *id : String <<PK>>
+    *userId : String <<FK>>
+    *scheduleId : String <<FK>>
+    type : String
+    reason : String
+    status : String
+  }
+}
+
+entity "Activity" as Activity {
+  *id : String <<PK>>
+  type : String
+  description : String
+  createdAt : DateTime
+  userId : String <<FK>>
+}
+
+' Relationship layout
+' Authentication relationships
+User ||--o{ Account : has
+User ||--o{ Session : has
+
+' User relationships
+User ||--o| Professor : has
+User ||--o| Invigilator : has
+User ||--o{ Appeal : submits
+User ||--o{ Activity : logs
+User }o--o{ Schedule : assigned to
+
+' Department relationships
+Department ||--o{ Subject : owns
+Department ||--o{ Professor : employs
+Department ||--o{ Invigilator : employs
+
+' Professor relationships
+Professor ||--o{ SubjectGroup : manages
+Professor ||--o{ SubjectGroupProfessor : assists
+Professor |o--o{ Invigilator : can be
+
+' Subject relationships
+Subject ||--o{ SubjectGroup : has
+SubjectGroup ||--o{ Schedule : scheduled as
+SubjectGroup ||--o{ SubjectGroupProfessor : has additional
+
+' Exam relationships
+Room ||--o{ Schedule : hosts
+Invigilator |o--o{ Schedule : supervises
+Schedule ||--o{ Appeal : relates to
+
+@enduml

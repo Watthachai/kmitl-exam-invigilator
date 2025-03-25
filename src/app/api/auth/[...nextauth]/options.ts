@@ -51,9 +51,34 @@ export const options: NextAuthOptions = {
      * We attach user.id and user.role to the session object.
      */
     async session({ session, user }) {
-      if (session.user) {
-        session.user.id = user.id;
-        session.user.role = user.role;
+      if (session?.user) {
+        const invigilator = await prisma.invigilator.findFirst({
+          where: { 
+            userId: user.id,
+            type: 'อาจารย์'
+          },
+          include: {
+            professor: true // เพิ่ม include professor
+          }
+        });
+
+        console.log('Session debug:', {
+          userId: user.id,
+          invigilatorId: invigilator?.id,
+          professorId: invigilator?.professor?.id,
+          type: invigilator?.type
+        });
+
+        // Type-safe assignments
+        session.user = {
+          ...session.user,
+          id: user.id,
+          role: user.role,
+          quota: invigilator?.quota ?? 0,
+          maxQuota: invigilator?.quota ?? 0,
+          assignedQuota: invigilator?.assignedQuota ?? 0,
+          professorId: invigilator?.professor?.id // ตรวจสอบว่าได้ assign ค่านี้ถูกต้อง
+        };
       }
       return session;
     },

@@ -8,6 +8,9 @@ interface ImportRequest {
   data: ExamData[];
   scheduleOption: 'ช่วงเช้า' | 'ช่วงบ่าย';
   examDate: string;
+  examType: 'MIDTERM' | 'FINAL';
+  academicYear: number;
+  semester: 1 | 2;
 }
 
 // Keep only the functions we use
@@ -20,12 +23,89 @@ export async function GET() {
 // Update getDepartmentNameFromCode function to handle multiple codes
 async function getDepartmentNameFromCode(
   code: string,
-  prismaClient: Prisma.TransactionClient
+  tx: Prisma.TransactionClient
 ): Promise<string> {
-  const department = await prismaClient.department.findFirst({
+  console.log(`Processing subject code: ${code}`);
+
+  // เพิ่มการตรวจสอบวิชา GenEd ก่อน
+  const genEdPrefixes = ['901', '902', '903', '904', '905', '906', '966'];
+  if (genEdPrefixes.some(prefix => code.startsWith(prefix))) {
+    console.log(`Found GenEd subject for code: ${code}`);
+    return 'วิชาเสรีทั่วไป';
+  }
+
+  // 1. ตรวจสอบรหัสเต็มก่อน (สำหรับกรณีพิเศษเช่น SIIE)
+  const specialDept = departments.find(dept => dept.codes.includes(code));
+  if (specialDept) {
+    console.log(`Found special department: ${specialDept.name} for code: ${code}`);
+    return specialDept.name;
+  }
+
+  // 2. ตรวจสอบรหัส 4 หลักสำหรับวิชานานาชาติ (เช่น 1300, 1301)
+  const fourDigitCode = code.substring(0, 4);
+  const internationalDept = departments.find(dept => dept.codes.includes(fourDigitCode));
+  if (internationalDept) {
+    console.log(`Found international department: ${internationalDept.name} for code: ${fourDigitCode}`);
+    return internationalDept.name;
+  }
+
+  // 3. ตรวจสอบรหัสภาควิชา (หลักที่ 3-4)
+  if (code.startsWith('01')) {
+    const deptCode = code.substring(2, 4);
+    // สร้าง mapping สำหรับรหัสภาควิชา
+    const deptMapping: { [key: string]: string } = {
+      '00': 'ส่วนกลาง',
+      '01': 'วิศวกรรมโทรคมนาคม',
+      '02': 'วิศวกรรมไฟฟ้า',
+      '04': 'วิศวกรรมอิเล็กทรอนิกส์',
+      '05': 'วิศวกรรมเครื่องกล',
+      '06': 'วิศวกรรมการวัดคุม',
+      '07': 'วิศวกรรมคอมพิวเตอร์',
+      '08': 'วิศวกรรมระบบควบคุม',
+      '09': 'วิศวกรรมโยธา',
+      '10': 'วิศวกรรมเกษตร',
+      '11': 'วิศวกรรมอาหาร',
+      '12': 'วิศวกรรมเคมี',
+      '13': 'วิศวกรรมคนตรีและสื่อประสม',
+      '14': 'วิศวกรรมพลังงานไฟฟ้า',
+      '20': 'วิศวกรรมปิโตรเคมี',
+      '21': 'วิศวกรรมอุตสาหการ',
+      '23': 'วิศวกรรมระบบไอโอทีและสารสนเทศ',
+      '24': 'วิศวกรรมแมคคาทรอนิกส์',
+      '25': 'วิศวกรรมอัตโนมัติ',
+      '26': 'วิศวกรรมนวัตกรรมคอมพิวเตอร์',
+      '28': 'วิศวกรรมซอฟต์แวร์',
+      '30': 'วิศวกรรมไฟฟ้า(นานาชาติ)',
+      '32': 'วิศวกรรมโยธา(นานาชาติ)',
+      '34': 'วิศวกรรมไฟฟ้าสื่อสารและอิเล็กทรอนิกส์',
+      '35': 'วิศวกรรมอุตสาหการ(นานาชาติ)',
+      '36': 'วิศวกรรมเคมี(นานาชาติ)',
+      '37': 'วิศวกรรมโยธา(ต่อเนื่อง)',
+      '38': 'วิศวกรรมเกษตร(ต่อเนื่อง)',
+      '40': 'วิศวกรรมอวกาศและภูมิสารสนเทศ',
+      '41': 'วิศวกรรมหุ่นยนต์และปัญญาประดิษฐ์',
+      '45': 'วิศวกรรมไฟฟ้า(ต่อเนื่อง)',
+      '51': 'วิศวกรรมพลังงาน',
+      '52': 'วิศวกรรมการเงิน',
+      '53': 'วิศวกรรมและการเป็นผู้ประกอบการ',
+      '92': 'วิศวกรรม-ชีวการแพทย์',
+      '99': 'ไม่มีภาควิชา'
+    };
+
+    if (deptMapping[deptCode]) {
+      console.log(`Found department by subject code (3-4): ${deptMapping[deptCode]} for code: ${code}`);
+      return deptMapping[deptCode];
+    }
+  }
+
+  // 4. ถ้าไม่พบในกรณีข้างต้น ค้นหาในฐานข้อมูล
+  const department = await tx.department.findFirst({
     where: {
       OR: [
-        { code },
+        { code: code.substring(2, 4) }, // หลักที่ 3-4
+        { code: code.substring(0, 4) }, // 4 หลักแรก
+        { code: code.substring(0, 3)},
+        { code }, // รหัสเต็ม
         {
           metadata: {
             path: ['codes'],
@@ -36,19 +116,26 @@ async function getDepartmentNameFromCode(
     }
   });
 
-  return department?.name || 'ไม่มีภาควิชา';
+  if (department) {
+    console.log(`Found department in database: ${department.name} for code: ${code}`);
+    return department.name;
+  }
+
+  // 5. ถ้าไม่พบทั้งหมด
+  console.warn(`No department found for code: ${code}`);
+  return 'ไม่มีภาควิชา';
 }
 
 // Update findOrCreateProfessors with better department handling
 async function findOrCreateProfessors(
   names: string[], 
   department: { id: string, name: string },
-  prismaClient: Prisma.TransactionClient
+  tx: Prisma.TransactionClient
 ) {
   const professors = [];
 
   // Get existing professors first
-  const existingProfs = await prismaClient.professor.findMany({
+  const existingProfs = await tx.professor.findMany({
     where: { name: { in: names.map(n => n.trim()) } },
     include: { department: true }
   });
@@ -58,32 +145,13 @@ async function findOrCreateProfessors(
     const existingProf = existingProfs.find(p => p.name === trimmedName);
 
     // If professor exists but in different department, don't update department
-    const professor = await prismaClient.professor.upsert({
+    const professor = await tx.professor.upsert({
       where: { name: trimmedName },
       create: {
         name: trimmedName,
         departmentId: department.id,
       },
       update: existingProf?.departmentId ? {} : { departmentId: department.id }
-    });
-
-    // Create/update invigilator with same logic
-    await prismaClient.invigilator.upsert({
-      where: { professorId: professor.id },
-      create: {
-        name: professor.name,
-        type: 'อาจารย์',
-        department: { connect: { id: department.id } },
-        professor: { connect: { id: professor.id } },
-        quota: 4,
-        assignedQuota: 0
-      },
-      update: {
-        name: professor.name,
-        ...(existingProf?.departmentId ? {} : {
-          department: { connect: { id: department.id } }
-        })
-      }
     });
     
     professors.push(professor);
@@ -96,23 +164,29 @@ async function findOrCreateProfessors(
 async function upsertSubject(
   code: string, 
   name: string, 
-  prismaClient: Prisma.TransactionClient
+  tx: Prisma.TransactionClient
 ) {
-  const deptName = await getDepartmentNameFromCode(code, prismaClient);
-  const department = await prismaClient.department.findFirstOrThrow({
+  const deptName = await getDepartmentNameFromCode(code, tx);
+  const department = await tx.department.findFirstOrThrow({
     where: { name: deptName }
   });
 
-  const subject = await prismaClient.subject.upsert({
+  // เช็คว่าเป็นวิชา GenEd หรือไม่
+  const genEdPrefixes = ['901', '902', '903', '904', '905', '906', '966'];
+  const isGenEd = genEdPrefixes.some(prefix => code.startsWith(prefix));
+
+  const subject = await tx.subject.upsert({
     where: { code },
     create: {
       code,
       name,
-      departmentId: department.id
+      departmentId: department.id,
+      isGenEd // เพิ่ม flag isGenEd
     },
     update: {
       name,
-      departmentId: department.id
+      departmentId: department.id,
+      isGenEd // อัพเดท flag isGenEd
     }
   });
 
@@ -124,37 +198,53 @@ async function processExamData(
   examData: ExamData[], 
   scheduleOption: string, 
   examDate: Date,
-  prismaClient: Prisma.TransactionClient
+  examType: 'MIDTERM' | 'FINAL',
+  academicYear: number,
+  semester: 1 | 2,
+  tx: Prisma.TransactionClient
 ) {
   if (!Array.isArray(examData)) {
     throw new Error('Invalid exam data: expected array');
   }
 
-  const processedSchedules = new Set();
+  const processedSchedules = new Map<string, number>(); // เปลี่ยนจาก Set เป็น Map เพื่อเก็บจำนวนครั้ง
+  const roomSchedules: Record<string, boolean> = {};
 
   for (const row of examData) {
     if (!validateExamData(row)) {
       throw new Error('Invalid exam data format');
     }
-    const [subjectCode, ...subjectNameParts] = row.วิชา.trim().split(' ');
-    const trimmedSubjectCode = subjectCode.trim();
+
+    // เช็คว่าห้องนี้มีการลงทะเบียนแล้วหรือไม่
+    const roomKey = `${row.อาคาร}_${row.ห้อง}_${examDate}_${scheduleOption}`;
     
+    // ดำเนินการปกติ
+    // Update the relevant part in processExamData
+const [subjectCode, ...subjectNameParts] = row.วิชา.split(' ');
+const trimmedSubjectCode = subjectCode === 'ไม่ระบุรหัสวิชา' 
+  ? 'UNKNOWN' 
+  : subjectCode.trim();
+
     // Get subject and department first
     const { subject, department } = await upsertSubject(
       trimmedSubjectCode, 
       subjectNameParts.join(' '),
-      prismaClient
+      tx
     );
 
     // Pass department to findOrCreateProfessors
-    const professorNames = row.ผู้สอน.split(',');
+    // Handle empty professor names
+    const professorNames = row.ผู้สอน === 'ไม่ระบุอาจารย์' 
+      ? ['ไม่ระบุอาจารย์'] 
+      : row.ผู้สอน.split(',').map(name => name.trim()).filter(Boolean);
+
     const professors = await findOrCreateProfessors(
       professorNames, 
       department, 
-      prismaClient
+      tx
     );
 
-    const room = await prismaClient.room.upsert({
+    const room = await tx.room.upsert({
       where: {
         building_roomNumber: {
           building: row.อาคาร.trim(),
@@ -168,7 +258,7 @@ async function processExamData(
       update: {}
     });
 
-    const subjectGroup = await prismaClient.subjectGroup.upsert({
+    const subjectGroup = await tx.subjectGroup.upsert({
       where: {
         subjectId_groupNumber_year: {
           subjectId: subject.id,
@@ -181,73 +271,183 @@ async function processExamData(
         year: parseInt(row['ชั้นปี'].trim()),
         studentCount: parseInt(row['นศ.'].trim()),
         subjectId: subject.id,
-        professorId: professors[0].id
+        professorId: professors[0].id, // Connect to the first professor
       },
       update: {
         studentCount: parseInt(row['นศ.'].trim()),
-        professorId: professors[0].id
       }
     });
 
-    const [startTime, endTime] = row.เวลา.split(' - ');
-    const scheduleKey = `${examDate}_${scheduleOption}_${row.เวลา}_${row.อาคาร}_${row.ห้อง}_${subjectGroup.id}`;
+    // Add additional professors to the subject group
+    // Start from index 1 since the first professor is already the main professor
+    if (professors.length > 1) {
+      // Delete any existing additional professors first to avoid duplicates
+      await tx.subjectGroupProfessor.deleteMany({
+        where: {
+          subjectGroupId: subjectGroup.id
+        }
+      });
 
-    if (!processedSchedules.has(scheduleKey)) {
+      // Add each additional professor
+      for (let i = 1; i < professors.length; i++) {
+        await tx.subjectGroupProfessor.create({
+          data: {
+            subjectGroupId: subjectGroup.id,
+            professorId: professors[i].id
+          }
+        });
+      }
+    }
+
+    const [startTime, endTime] = row.เวลา.split(' - ');
+    
+    // เช็คว่ามีตารางสอบในห้องและเวลาเดียวกันหรือไม่
+    const existingSchedules = await tx.schedule.count({
+      where: {
+        date: examDate,
+        roomId: room.id,
+        startTime: new Date(`1970-01-01T${startTime}`),
+        endTime: new Date(`1970-01-01T${endTime}`),
+        scheduleDateOption: scheduleOption.toUpperCase()
+      }
+    });
+
+    // อนุญาตให้มีได้ไม่เกิน 2 คนต่อห้อง
+    if (existingSchedules < 2) {
       try {
-        // Basic schedule data without invigilator
+        const scheduleKey = `${room.id}_${startTime}_${endTime}_${examDate}`;
         const scheduleData = {
           date: examDate,
           scheduleDateOption: scheduleOption.toUpperCase(),
           startTime: new Date(`1970-01-01T${startTime}`),
           endTime: new Date(`1970-01-01T${endTime}`),
           roomId: room.id,
-          subjectGroupId: subjectGroup.id
+          subjectGroupId: subjectGroup.id,
+          notes: existingSchedules === 1 ? 'เพิ่มแถวโดยระบบ' : row.หมายเหตุ?.toString() || '',
+          examType,
+          academicYear,
+          semester,
+          invigilatorPosition: existingSchedules + 1
         };
 
-        console.log('Creating schedule:', scheduleData);
-
-        await prismaClient.schedule.upsert({
-          where: {
-            date_scheduleDateOption_startTime_endTime_roomId_subjectGroupId: {
-              date: examDate,
-              scheduleDateOption: scheduleOption.toUpperCase(),
-              startTime: new Date(`1970-01-01T${startTime}`),
-              endTime: new Date(`1970-01-01T${endTime}`),
-              roomId: room.id,
-              subjectGroupId: subjectGroup.id
-            }
-          },
-          create: scheduleData,
-          update: {} // Empty update since invigilator will be assigned later
+        await tx.schedule.create({
+          data: scheduleData
         });
 
-        processedSchedules.add(scheduleKey);
-        
+        processedSchedules.set(scheduleKey, existingSchedules + 1);
+        roomSchedules[roomKey] = true;
       } catch (error) {
-        console.error('Schedule creation failed:', { 
-          error: error instanceof Error ? error.message : 'Unknown error',
-          scheduleKey 
-        });
+        console.error('Schedule creation failed:', error);
         throw error;
       }
     }
   }
+
+  // แก้ไขส่วนการเพิ่มแถวที่ขาด
+  for (const row of examData) {
+    // เช็คจำนวน schedules ที่มีอยู่แล้ว
+    const room = await tx.room.findFirst({
+      where: {
+        building: row.อาคาร.trim(),
+        roomNumber: row.ห้อง.trim()
+      }
+    });
+
+    if (!room) continue;
+
+    const existingSchedulesCount = await tx.schedule.count({
+      where: {
+        date: examDate,
+        scheduleDateOption: scheduleOption.toUpperCase(),
+        examType,
+        academicYear,
+        semester,
+        roomId: room.id
+      }
+    });
+
+    // สร้างเพิ่มเติมเฉพาะถ้ามีน้อยกว่า 2 รายการ
+    if (existingSchedulesCount < 2) {
+      // Get room and subject group data first
+      const room = await tx.room.findFirst({
+        where: {
+          building: row.อาคาร.trim(),
+          roomNumber: row.ห้อง.trim()
+        }
+      });
+
+      if (!room) continue;
+
+      const [subjectCode] = row.วิชา.trim().split(' ');
+      const { subject } = await upsertSubject(
+        subjectCode.trim(),
+        '', // Name not needed for lookup
+        tx
+      );
+
+      const subjectGroup = await tx.subjectGroup.findFirst({
+        where: {
+          subjectId: subject.id,
+          groupNumber: row.กลุ่ม.trim(),
+          year: parseInt(row['ชั้นปี'].trim())
+        }
+      });
+
+      if (!subjectGroup) continue;
+
+      // สร้าง schedule เพิ่มเติมสำหรับห้องที่ขาด
+      const scheduleData = {
+        date: examDate,
+        scheduleDateOption: scheduleOption.toUpperCase(),
+        startTime: new Date(`1970-01-01T${row.เวลา.split(' - ')[0]}`),
+        endTime: new Date(`1970-01-01T${row.เวลา.split(' - ')[1]}`),
+        roomId: room.id,
+        subjectGroupId: subjectGroup.id,
+        notes: 'เพิ่มแถวโดยระบบ',
+        examType,
+        academicYear,
+        semester
+      };
+
+      await tx.schedule.create({
+        data: scheduleData
+      });
+    }
+  }
 }
 
-// Add validation helper
+// Helper functions for handling empty fields
+function parseField(value: string | number | null | undefined, defaultValue: string): string {
+  if (!value || value.toString().trim() === '') {
+    return defaultValue;
+  }
+  return value.toString().trim();
+}
+
+function parseNumber(value: string | number | null | undefined, defaultValue: number): number {
+  if (!value || value.toString().trim() === '') {
+    return defaultValue;
+  }
+  const parsed = parseInt(value.toString().trim());
+  return isNaN(parsed) ? defaultValue : parsed;
+}
+
+// Update validation helper to handle empty fields
 function validateExamData(data: ExamData): boolean {
   if (!data || typeof data !== 'object') return false;
   
-  return Boolean(
-    data.วิชา?.trim() &&
-    data.กลุ่ม?.trim() &&
-    data['ชั้นปี']?.toString()?.trim() &&
-    data['นศ.']?.toString()?.trim() &&
-    data.เวลา?.trim() &&
-    data['ผู้สอน']?.trim() &&
-    data.อาคาร?.trim() &&
-    data.ห้อง?.trim()
-  );
+  // Handle empty fields with default values
+  data.วิชา = parseField(data.วิชา, 'ไม่ระบุรหัสวิชา');
+  data.กลุ่ม = parseField(data.กลุ่ม, 'ไม่ระบุกลุ่ม');
+  data['ชั้นปี'] = parseField(data['ชั้นปี'], 'ทุกชั้นปี');
+  data['นศ.'] = parseNumber(data['นศ.'], 0).toString();
+  data.เวลา = parseField(data.เวลา, '00:00 - 00:00');
+  data['ผู้สอน'] = parseField(data['ผู้สอน'], 'ไม่ระบุอาจารย์');
+  data.อาคาร = parseField(data.อาคาร, 'ไม่ระบุอาคาร');
+  data.ห้อง = parseField(data.ห้อง, 'ไม่ระบุห้อง');
+  data.หมายเหตุ = parseField(data.หมายเหตุ, '');
+
+  return true; // Always return true since we're providing default values
 }
 
 // Update error validation helper with type guard
@@ -263,19 +463,50 @@ function validateTransactionError(error: unknown): Error {
   return new Error('An unexpected error occurred during import');
 }
 
-// Update seedDepartments to use prismaClient
 // Update seedDepartments to handle multiple codes
-async function seedDepartments(prismaClient: Prisma.TransactionClient) {
+async function seedDepartments(tx: Prisma.TransactionClient) {
   try {
-    console.log('Starting department seeding...');
+    console.log('Checking if departments need updating...');
     
-    for (const dept of departments) {
-      await prismaClient.department.upsert({
+    // First, get all existing departments with their metadata
+    const existingDepartments = await tx.department.findMany({
+      select: {
+        code: true,
+        name: true,
+        metadata: true
+      }
+    });
+
+    // Create a map for faster lookups
+    const existingDeptMap = new Map(
+      existingDepartments.map(dept => [dept.code, dept])
+    );
+
+    // Track which departments need updates
+    const departsToUpdate = departments.filter(dept => {
+      const existing = existingDeptMap.get(dept.code);
+      if (!existing) return true; // New department
+
+      // Check if any data has changed
+      return existing.name !== dept.name ||
+        JSON.stringify((existing.metadata as { codes: string[] })?.codes) !== JSON.stringify(dept.codes);
+    });
+
+    if (departsToUpdate.length === 0) {
+      console.log('All departments are up to date, skipping seed');
+      return true;
+    }
+
+    console.log(`Updating ${departsToUpdate.length} departments...`);
+    
+    // Only upsert departments that need updating
+    for (const dept of departsToUpdate) {
+      console.log(`Seeding department: ${dept.name} (${dept.code})`);
+      await tx.department.upsert({
         where: { code: dept.code },
         create: {
           name: dept.name,
           code: dept.code,
-          // Store additional codes as JSON in a metadata field
           metadata: { codes: dept.codes }
         },
         update: { 
@@ -285,9 +516,8 @@ async function seedDepartments(prismaClient: Prisma.TransactionClient) {
       });
     }
 
-    console.log(`Department seeding completed. Total: ${departments.length}`);
+    console.log(`Department update completed. Updated: ${departsToUpdate.length}`);
     return true;
-
   } catch (error) {
     console.error('Error seeding departments:', error);
     throw validateTransactionError(error);
@@ -306,7 +536,7 @@ export async function POST(request: Request) {
       await tx.activity.create({
         data: {
           type: 'IMPORT',
-          description: `Starting import of ${body.data.length} exam schedules`
+          description: `Starting import of ${body.data.length} exam schedules for ${body.examType} ${body.academicYear}/${body.semester}`
         }
       });
 
@@ -318,6 +548,9 @@ export async function POST(request: Request) {
         body.data, 
         body.scheduleOption, 
         new Date(body.examDate),
+        body.examType,
+        body.academicYear,
+        body.semester,
         tx
       );
 
@@ -331,8 +564,8 @@ export async function POST(request: Request) {
 
       return { success: true, count: body.data.length };
     }, {
-      maxWait: 10000, // 10s max wait
-      timeout: 30000, // 30s timeout
+      maxWait: 90000, // 90s timeout
+      timeout: 1200000, // 30s timeout
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable
     });
 

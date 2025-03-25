@@ -1,0 +1,11 @@
+{
+  "watch": ["server.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "ignore": [
+    ".git",
+    "node_modules/**/node_modules",
+    ".next",
+    "dist"
+  ],
+  "exec": "ts-node --project tsconfig.server.json server.ts",
+  "ext": "ts,tsx"
+}

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import toast, { Toaster } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
+import { ImSpinner8 } from 'react-icons/im';
+import { FiDatabase } from 'react-icons/fi';
 
 interface Invigilator {
   id: string;
@@ -63,6 +65,7 @@ export default function InvigilatorsPage() {
     departmentId: '',
     professorId: ''
   });
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchInvigilators();
@@ -72,12 +75,15 @@ export default function InvigilatorsPage() {
 
   const fetchInvigilators = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch('/api/invigilators?include=department,professor,user,schedules');
       const data = await response.json();
       setInvigilators(data);
     } catch (error) {
       console.error('Failed to fetch invigilators:', error);
       toast.error('Failed to fetch invigilators');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -213,6 +219,8 @@ export default function InvigilatorsPage() {
   return (
     <div className="p-6 space-y-6">
       <Toaster/>
+      
+      {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">รายการผู้คุมสอบ</h1>
         <button 
@@ -223,271 +231,299 @@ export default function InvigilatorsPage() {
         </button>
       </div>
 
-      <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead className="bg-white/95 backdrop-blur-sm">
-              <tr className="border-b border-gray-100">
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ข้อมูลทั่วไป</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ภาควิชา</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ข้อมูลอาจารย์</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">บัญชี Google</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ข้อมูลโควต้า</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ตารางคุมสอบ</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">จัดการ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {invigilators.map((invigilator) => (
-                <tr key={invigilator.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="space-y-1">
-                      <div className="font-medium text-gray-900">{invigilator.name}</div>
-                      <div className="text-sm text-gray-500">รหัส: {invigilator.id}</div>
-                      <div className="text-sm text-gray-500">ประเภท: {invigilator.type}</div>
-                    </div>
-                  </td>
-                  
-                  <td className="px-4 py-3">
-                    <div className="space-y-1">
-                      {invigilator.departmentId && invigilator.department ? (
-                        <>
-                          <div className="font-medium text-gray-900">{invigilator.department.name}</div>
-                          <div className="text-sm text-gray-500">รหัส: {invigilator.departmentId}</div>
-                        </>
-                      ) : (
-                        <span className="text-gray-400">ไม่มีข้อมูลภาควิชา</span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <div className="space-y-1">
-                      {invigilator.professorId && invigilator.professor ? (
-                        <>
-                          <div className="font-medium text-gray-900">{invigilator.professor?.name}</div>
-                          <div className="text-sm text-gray-500">รหัส: {invigilator.professorId}</div>
-                        </>
-                      ) : (
-                        <span className="text-orange-400 font-medium italic">เป็นบุคลากร</span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <div className="space-y-1">
-                      {invigilator.userId && invigilator.user ? (
-                        <>
-                          <div className="font-medium text-gray-900">
-                            {invigilator.user?.name || invigilator.user?.email || 'ไม่ระบุชื่อ'}
-                          </div>
-                          <div className="text-sm text-gray-500">รหัส: {invigilator.userId}</div>
-                        </>
-                      ) : (
-                        <span className="text-gray-400">ไม่มีบัญชีผู้ใช้</span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <div className="space-y-1">
-                      <div className="text-sm">
-                        <span className="font-medium">โควต้าทั้งหมด:</span> {invigilator.quota}
-                      </div>
-                      <div className="text-sm">
-                        <span className="font-medium">ใช้ไปแล้ว:</span> {invigilator.assignedQuota}
-                      </div>
-                      <div className="text-sm">
-                        <span className="font-medium">คงเหลือ:</span> {invigilator.quota - invigilator.assignedQuota}
-                      </div>
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <div className="space-y-1">
-                      {invigilator.schedules?.length > 0 ? (
-                        <div className="text-sm">
-                          <span className="font-medium">จำนวนตารางคุมสอบ:</span> {invigilator.schedules.length}
+      {/* Table Container */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100">
+        <div className="h-[calc(100vh-12rem)] overflow-auto">
+          {isLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <ImSpinner8 className="w-8 h-8 text-blue-500 animate-spin" />
+                <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
+              </div>
+            </div>
+          ) : invigilators.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <FiDatabase className="w-16 h-16 text-gray-300" />
+                <p className="text-gray-500 text-lg">ไม่พบข้อมูลผู้คุมสอบ</p>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm"
+                >
+                  เพิ่มผู้คุมสอบ
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead className="bg-white/95 backdrop-blur-sm">
+                  <tr className="border-b border-gray-100">
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ข้อมูลทั่วไป</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ภาควิชา</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ข้อมูลอาจารย์</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">บัญชี Google</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ข้อมูลโควต้า</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ตารางคุมสอบ</th>
+                    <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {invigilators.map((invigilator) => (
+                    <tr key={invigilator.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="space-y-1">
+                          <div className="font-medium text-gray-900">{invigilator.name}</div>
+                          <div className="text-sm text-gray-500">รหัส: {invigilator.id}</div>
+                          <div className="text-sm text-gray-500">ประเภท: {invigilator.type}</div>
                         </div>
-                      ) : (
-                        <span className="text-gray-400">ไม่มีตารางคุมสอบ</span>
-                      )}
-                    </div>
-                  </td>
+                      </td>
+                      
+                      <td className="px-4 py-3">
+                        <div className="space-y-1">
+                          {invigilator.departmentId && invigilator.department ? (
+                            <>
+                              <div className="font-medium text-gray-900">{invigilator.department.name}</div>
+                              <div className="text-sm text-gray-500">รหัส: {invigilator.departmentId}</div>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">ไม่มีข้อมูลภาควิชา</span>
+                          )}
+                        </div>
+                      </td>
 
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => {
-                          setEditInvigilator(invigilator);
-                          setShowEditModal(true);
-                        }}
-                        className="flex items-center gap-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                      >
-                        <FiEdit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedInvigilator(invigilator);
-                          setShowDeleteModal(true);
-                        }}
-                        className="flex items-center gap-1 px-3 py-1 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                      >
-                        <FiTrash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      <td className="px-4 py-3">
+                        <div className="space-y-1">
+                          {invigilator.professorId && invigilator.professor ? (
+                            <>
+                              <div className="font-medium text-gray-900">{invigilator.professor?.name}</div>
+                              <div className="text-sm text-gray-500">รหัส: {invigilator.professorId}</div>
+                            </>
+                          ) : (
+                            <span className="text-orange-400 font-medium italic">เป็นบุคลากร</span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="space-y-1">
+                          {invigilator.userId && invigilator.user ? (
+                            <>
+                              <div className="font-medium text-gray-900">
+                                {invigilator.user?.name || invigilator.user?.email || 'ไม่ระบุชื่อ'}
+                              </div>
+                              <div className="text-sm text-gray-500">รหัส: {invigilator.userId}</div>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">ไม่มีบัญชีผู้ใช้</span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="space-y-1">
+                          <div className="text-sm">
+                            <span className="font-medium">โควต้าทั้งหมด:</span> {invigilator.quota}
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-medium">ใช้ไปแล้ว:</span> {invigilator.assignedQuota}
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-medium">คงเหลือ:</span> {invigilator.quota - invigilator.assignedQuota}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="space-y-1">
+                          {invigilator.schedules?.length > 0 ? (
+                            <div className="text-sm">
+                              <span className="font-medium">จำนวนตารางคุมสอบ:</span> {invigilator.schedules.length}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">ไม่มีตารางคุมสอบ</span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              setEditInvigilator(invigilator);
+                              setShowEditModal(true);
+                            }}
+                            className="flex items-center gap-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                          >
+                            <FiEdit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedInvigilator(invigilator);
+                              setShowDeleteModal(true);
+                            }}
+                            className="flex items-center gap-1 px-3 py-1 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          >
+                            <FiTrash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="fixed z-index-50 flex items-center justify-center">
-        {showAddModal && (
-          <PopupModal
-            title="เพิ่มผู้คุมสอบใหม่"
-            onClose={() => setShowAddModal(false)}
-            onConfirm={handleAddInvigilator}
-            confirmText="เพิ่มผู้คุมสอบ"
-          >
-            <div className="space-y-4">
-              <div>
-                <label className="block text-gray-700">Name</label>
-                <input
-                  type="text"
-                  value={newInvigilator.name}
-                  onChange={(e) => setNewInvigilator({ ...newInvigilator, name: e.target.value })}
-                  className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter invigilator name"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700">Type</label>
-                <select
-                  value={newInvigilator.type}
-                  onChange={(e) => setNewInvigilator({ ...newInvigilator, type: e.target.value })}
-                  className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="บุคลากร">บุคลากร</option>
-                  <option value="อาจารย์">อาจารย์</option>
-                </select>
-              </div>
-
-              {newInvigilator.type === 'บุคลากร' && (
+      {/* Modals - Only render container when a modal is open */}
+      {(showAddModal || showEditModal || showDeleteModal) && (
+        <div className="fixed inset-0 z-[100]" style={{ margin: '0px !important' }}>
+          {showAddModal && (
+            <PopupModal
+              title="เพิ่มผู้คุมสอบใหม่"
+              onClose={() => setShowAddModal(false)}
+              onConfirm={handleAddInvigilator}
+              confirmText="เพิ่มผู้คุมสอบ"
+            >
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-gray-700">ภาควิชา</label>
+                  <label className="block text-gray-700">Name</label>
+                  <input
+                    type="text"
+                    value={newInvigilator.name}
+                    onChange={(e) => setNewInvigilator({ ...newInvigilator, name: e.target.value })}
+                    className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter invigilator name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700">Type</label>
                   <select
-                    value={newInvigilator.departmentId || ''}  // Ensure empty string fallback
-                    onChange={(e) => setNewInvigilator({ ...newInvigilator, departmentId: e.target.value })}
+                    value={newInvigilator.type}
+                    onChange={(e) => setNewInvigilator({ ...newInvigilator, type: e.target.value })}
                     className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">เลือกภาควิชา</option>
-                    {departments.map(dept => (
-                      <option key={dept.id} value={dept.id}>{dept.name}</option>
-                    ))}
+                    <option value="บุคลากร">บุคลากร</option>
+                    <option value="อาจารย์">อาจารย์</option>
                   </select>
                 </div>
-              )}
 
-              {newInvigilator.type === 'อาจารย์' && (
-                <div>
-                  <label className="block text-gray-700">อาจารย์</label>
-                  <select
-                    value={newInvigilator.professorId || ''}  // Ensure empty string fallback
-                    onChange={(e) => setNewInvigilator({ ...newInvigilator, professorId: e.target.value })}
-                    className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">เลือกอาจารย์</option>
-                    {professors.map(prof => (
-                      <option key={prof.id} value={prof.id}>{prof.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-          </PopupModal>
-        )}
+                {newInvigilator.type === 'บุคลากร' && (
+                  <div>
+                    <label className="block text-gray-700">ภาควิชา</label>
+                    <select
+                      value={newInvigilator.departmentId || ''}  // Ensure empty string fallback
+                      onChange={(e) => setNewInvigilator({ ...newInvigilator, departmentId: e.target.value })}
+                      className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">เลือกภาควิชา</option>
+                      {departments.map(dept => (
+                        <option key={dept.id} value={dept.id}>{dept.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
-        {showEditModal && editInvigilator && (
-          <PopupModal
-            title="แก้ไขข้อมูลผู้คุมสอบ"
-            onClose={() => setShowEditModal(false)}
-            onConfirm={handleEditInvigilator}
-            confirmText="บันทึกการแก้ไข"
-          >
-            <div className="space-y-4">
-              <div>
-                <label className="block text-gray-700">Name</label>
-                <input
-                  type="text"
-                  value={editInvigilator.name}
-                  onChange={(e) => setEditInvigilator({ ...editInvigilator, name: e.target.value })}
-                  className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter invigilator name"
-                />
+                {newInvigilator.type === 'อาจารย์' && (
+                  <div>
+                    <label className="block text-gray-700">อาจารย์</label>
+                    <select
+                      value={newInvigilator.professorId || ''}  // Ensure empty string fallback
+                      onChange={(e) => setNewInvigilator({ ...newInvigilator, professorId: e.target.value })}
+                      className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">เลือกอาจารย์</option>
+                      {professors.map(prof => (
+                        <option key={prof.id} value={prof.id}>{prof.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-gray-700">Type</label>
-                <select
-                  value={editInvigilator.type}
-                  onChange={(e) => setEditInvigilator({ ...editInvigilator, type: e.target.value })}
-                  className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="บุคลากร">บุคลากร</option>
-                  <option value="อาจารย์">อาจารย์</option>
-                </select>
+            </PopupModal>
+          )}
+
+          {showEditModal && editInvigilator && (
+            <PopupModal
+              title="แก้ไขข้อมูลผู้คุมสอบ"
+              onClose={() => setShowEditModal(false)}
+              onConfirm={handleEditInvigilator}
+              confirmText="บันทึกการแก้ไข"
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-gray-700">Name</label>
+                  <input
+                    type="text"
+                    value={editInvigilator.name}
+                    onChange={(e) => setEditInvigilator({ ...editInvigilator, name: e.target.value })}
+                    className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter invigilator name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700">Type</label>
+                  <select
+                    value={editInvigilator.type}
+                    onChange={(e) => setEditInvigilator({ ...editInvigilator, type: e.target.value })}
+                    className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="บุคลากร">บุคลากร</option>
+                    <option value="อาจารย์">อาจารย์</option>
+                  </select>
+                </div>
+
+                {editInvigilator.type === 'บุคลากร' && (
+                  <div>
+                    <label className="block text-gray-700">Department</label>
+                    <select
+                      value={editInvigilator.departmentId || ''}  // Ensure empty string fallback
+                      onChange={(e) => setEditInvigilator({ ...editInvigilator, departmentId: e.target.value })}
+                      className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Department</option>
+                      {departments.map(dept => (
+                        <option key={dept.id} value={dept.id}>{dept.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {editInvigilator.type === 'อาจารย์' && (
+                  <div>
+                    <label className="block text-gray-700">Professor</label>
+                    <select
+                      value={editInvigilator.professorId || ''}  // Ensure empty string fallback
+                      onChange={(e) => setEditInvigilator({ ...editInvigilator, professorId: e.target.value })}
+                      className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Professor</option>
+                      {professors.map(prof => (
+                        <option key={prof.id} value={prof.id}>{prof.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
+            </PopupModal>
+          )}
 
-              {editInvigilator.type === 'บุคลากร' && (
-                <div>
-                  <label className="block text-gray-700">Department</label>
-                  <select
-                    value={editInvigilator.departmentId || ''}  // Ensure empty string fallback
-                    onChange={(e) => setEditInvigilator({ ...editInvigilator, departmentId: e.target.value })}
-                    className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select Department</option>
-                    {departments.map(dept => (
-                      <option key={dept.id} value={dept.id}>{dept.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {editInvigilator.type === 'อาจารย์' && (
-                <div>
-                  <label className="block text-gray-700">Professor</label>
-                  <select
-                    value={editInvigilator.professorId || ''}  // Ensure empty string fallback
-                    onChange={(e) => setEditInvigilator({ ...editInvigilator, professorId: e.target.value })}
-                    className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select Professor</option>
-                    {professors.map(prof => (
-                      <option key={prof.id} value={prof.id}>{prof.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-          </PopupModal>
-        )}
-
-        {showDeleteModal && selectedInvigilator && (
-          <PopupModal
-            title="ลบผู้คุมสอบ"
-            onClose={() => setShowDeleteModal(false)}
-            onConfirm={deleteInvigilator}
-            confirmText="ยืนยันการลบ"
-          >
-            <p className="text-gray-700">
-              คุณต้องการลบ <strong>{selectedInvigilator.name}</strong> ใช่หรือไม่?
-            </p>
-          </PopupModal>
-        )}
-      </div>
+          {showDeleteModal && selectedInvigilator && (
+            <PopupModal
+              title="ลบผู้คุมสอบ"
+              onClose={() => setShowDeleteModal(false)}
+              onConfirm={deleteInvigilator}
+              confirmText="ยืนยันการลบ"
+            >
+              <p className="text-gray-700">
+                คุณต้องการลบ <strong>{selectedInvigilator.name}</strong> ใช่หรือไม่?
+              </p>
+            </PopupModal>
+          )}
+        </div>
+      )}
     </div>
   );
 }

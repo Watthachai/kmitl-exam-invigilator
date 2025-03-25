@@ -1,9 +1,57 @@
-// app/dashboard/components/dashboard/activity-feed.tsx
-import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
-import { useActivities } from "@/app/hooks/useActivities";
-import { getActivityIcon } from "@/app/utils/activity-icons";
+import { Card, CardTitle } from '@/app/components/ui/card';
+import { useActivities } from '@/app/hooks/useActivities';
 import { formatDistanceToNow, parseISO } from 'date-fns';
+import { 
+  FiCheck, 
+  FiAlertTriangle, 
+  FiX, 
+  FiLogIn, 
+  FiUserPlus,
+  FiEdit,
+  FiTrash2,
+  FiInfo
+} from 'react-icons/fi';
 
+// เพิ่ม interface สำหรับ activity type
+interface ActivityIconProps {
+  type: string;
+  className?: string;
+}
+
+// Component สำหรับแสดงไอคอนตามประเภทกิจกรรม
+const ActivityIcon = ({ type, className = "w-5 h-5" }: ActivityIconProps) => {
+  switch (type.toLowerCase()) {
+    case 'success':
+      return <FiCheck className={`${className} text-green-500`} />;
+    case 'warning':
+      return <FiAlertTriangle className={`${className} text-yellow-500`} />;
+    case 'error':
+      return <FiX className={`${className} text-red-500`} />;
+    case 'login':
+      return <FiLogIn className={`${className} text-blue-500`} />;
+    case 'create':
+      return <FiUserPlus className={`${className} text-purple-500`} />;
+    case 'update':
+      return <FiEdit className={`${className} text-orange-500`} />;
+    case 'delete':
+      return <FiTrash2 className={`${className} text-red-500`} />;
+    default:
+      return <FiInfo className={`${className} text-gray-500`} />;
+  }
+};
+
+// ฟังก์ชันสำหรับกำหนดประเภทกิจกรรม
+const getActivityType = (description: string): string => {
+  const desc = description.toLowerCase();
+  if (desc.includes('เข้าสู่ระบบ')) return 'login';
+  if (desc.includes('สร้าง') || desc.includes('เพิ่ม')) return 'create';
+  if (desc.includes('แก้ไข') || desc.includes('อัปเดต')) return 'update';
+  if (desc.includes('ลบ')) return 'delete';
+  if (desc.includes('ผิดพลาด') || desc.includes('error')) return 'error';
+  if (desc.includes('เตือน') || desc.includes('warning')) return 'warning';
+  if (desc.includes('สำเร็จ') || desc.includes('success')) return 'success';
+  return 'info';
+};
 
 export function ActivityFeed() {
   const { activities, isLoading, error } = useActivities();
@@ -18,58 +66,41 @@ export function ActivityFeed() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activities</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center h-40">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activities</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-red-500 text-center">{error}</div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <Card>
-      <CardHeader>
+      <div className="p-6">
         <CardTitle>Recent Activities</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {activities?.map((activity) => (
-            <div key={activity.id} className="flex items-center gap-4">
-              <div className="rounded-full p-2 bg-gray-50">
-                {getActivityIcon(activity.type)}
-              </div>
-              <div className="flex-1 space-y-1">
-                <p className="text-sm font-medium">{activity.description}</p>
-                <div className="flex items-center text-xs text-gray-500 gap-2">
-                  <span>{formatDate(activity.createdAt)}</span>
-                  <span>•</span>
-                  <span>by {activity.user?.name || 'System'}</span>
+        
+        <div className="mt-6 space-y-4 max-h-[600px] overflow-y-auto pr-4 scrollbar-thin scrollbar-thumb-gray-200 hover:scrollbar-thumb-gray-300">
+          {isLoading ? (
+            <p className="text-gray-500">กำลังโหลด...</p>
+          ) : error ? (
+            <p className="text-red-500">{error}</p>
+          ) : activities?.length === 0 ? (
+            <p className="text-gray-500">ไม่มีกิจกรรมล่าสุด</p>
+          ) : (
+            activities?.map((activity) => {
+              const activityType = getActivityType(activity.description);
+              return (
+                <div
+                  key={activity.id}
+                  className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex-shrink-0 mt-1">
+                    <ActivityIcon type={activityType} />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <p className="text-sm">{activity.description}</p>
+                    <p className="text-xs text-gray-500">
+                      {formatDate(activity.createdAt.toString())}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              );
+            })
+          )}
         </div>
-      </CardContent>
+      </div>
     </Card>
   );
 }

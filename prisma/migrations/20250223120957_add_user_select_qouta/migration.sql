@@ -1,0 +1,9 @@
+-- AlterTable
+ALTER TABLE "Department" ADD COLUMN     "quota" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "usedQuota" INTEGER NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "Schedule" ADD COLUMN     "departmentQuota" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "isGenEd" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "priority" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "quotaFilled" BOOLEAN NOT NULL DEFAULT false;
