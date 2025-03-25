@@ -1,0 +1,16 @@
+{
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/node",
+      "config": {
+        "buildCommand": "npm run vercel-build"
+      }
+    }
+  ],
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "NEXTAUTH_URL": "https://kmitl-exam-invigilator.vercel.app",
+    "NEXTAUTH_SECRET": "@nextauth_secret"
+  }
+}
