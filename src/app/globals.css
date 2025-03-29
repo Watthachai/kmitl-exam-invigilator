@@ -105,6 +105,19 @@ body {
     width: 6px;
     height: 6px;
   }
+  
+  .break-words {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
+  }
+  
+  .text-ellipsis {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+  }
 }
 
 .css

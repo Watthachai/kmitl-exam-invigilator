@@ -5,7 +5,7 @@ import { toast, Toaster } from 'react-hot-toast';
 import { FiSearch, FiCalendar, FiPieChart } from 'react-icons/fi';
 
 export default function EmailListPage() {
-  const [invigilators, setInvigilators] = useState([]);
+  const [invigilators, setInvigilators] = useState<Invigilator[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({
     department: '',
@@ -34,7 +34,25 @@ export default function EmailListPage() {
     }
   };
 
-  const sendEmailToInvigilator = async (invigilator, emailType) => {
+  interface Invigilator {
+    id: string;
+    name?: string;
+    user?: {
+      id: string;
+      email: string;
+    };
+    departmentId?: string;
+    department?: {
+      name: string;
+    };
+    schedules?: { id: string; date: string; location: string }[]; // Replace with the actual structure of schedules
+    assignedQuota?: number;
+    quota?: number;
+  }
+
+  type EmailType = 'schedule' | 'quota';
+
+  const sendEmailToInvigilator = async (invigilator: Invigilator, emailType: EmailType): Promise<void> => {
     try {
       // ตรวจสอบว่ามีอีเมลหรือไม่
       if (!invigilator.user?.email) {
@@ -77,8 +95,8 @@ export default function EmailListPage() {
     }
   };
 
-  const hasSchedules = (invigilator) => {
-    return invigilator.schedules && invigilator.schedules.length > 0;
+  const hasSchedules = (invigilator: Invigilator): boolean => {
+    return !!invigilator.schedules && invigilator.schedules.length > 0;
   };
 
   // กรองข้อมูลผู้คุมสอบ

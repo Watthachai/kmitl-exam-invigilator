@@ -6,6 +6,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import PopupModal from '@/app/components/ui/popup-modal';
 import { ImSpinner8 } from 'react-icons/im';
 import { FiDatabase } from 'react-icons/fi';
+import Select from 'react-select';
 
 interface Invigilator {
   id: string;
@@ -32,6 +33,7 @@ interface Department {
 interface Professor {
   id: string;
   name: string;
+  departmentId?: string; // Add departmentId property
 }
 
 interface User {
@@ -66,6 +68,15 @@ export default function InvigilatorsPage() {
     professorId: ''
   });
   const [isLoading, setIsLoading] = useState(true);
+
+  // เพิ่ม state สำหรับการค้นหา
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('all');
+  const [filterDepartment, setFilterDepartment] = useState('');
+
+  // เพิ่ม state สำหรับการค้นหาอาจารย์ที่ยังไม่เป็นผู้คุมสอบ
+  const [searchProfessor, setSearchProfessor] = useState('');
+  const [selectedProfessor, setSelectedProfessor] = useState<Professor | null>(null);
 
   useEffect(() => {
     fetchInvigilators();
@@ -217,7 +228,12 @@ export default function InvigilatorsPage() {
   };
 
   // เพิ่มฟังก์ชัน sendEmailToInvigilator
-  const sendEmailToInvigilator = async (invigilator, emailType) => {
+  interface SendEmailPayload {
+    type: string;
+    userId: string;
+  }
+
+  const sendEmailToInvigilator = async (invigilator: Invigilator, emailType: string): Promise<void> => {
     // ตรวจสอบว่ามีอีเมลหรือไม่
     if (!invigilator.user?.email || !invigilator.user.email.endsWith('@kmitl.ac.th')) {
       toast.error('ไม่พบอีเมล KMITL ของอาจารย์ท่านนี้');
@@ -227,16 +243,18 @@ export default function InvigilatorsPage() {
     try {
       const toastId = toast.loading('กำลังส่งอีเมล...');
       
+      const payload: SendEmailPayload = {
+        type: emailType,
+        userId: invigilator.userId!,
+      };
+
       const response = await fetch('/api/notifications/individual-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: emailType,
-          userId: invigilator.userId
-        })
+        body: JSON.stringify(payload),
       });
       
-      const data = await response.json();
+      const data: { message?: string; error?: string } = await response.json();
       
       toast.dismiss(toastId);
       
@@ -252,6 +270,52 @@ export default function InvigilatorsPage() {
     }
   };
 
+  // เพิ่มฟังก์ชันหาอาจารย์ที่ยังไม่มีในระบบ
+  const availableProfessors = professors.filter(
+    prof => !invigilators.some(inv => inv.professorId === prof.id)
+  );
+
+  // เพิ่มฟังก์ชันกรองข้อมูล
+  const filteredInvigilators = invigilators.filter(invigilator => {
+    // กรองตามคำค้นหา
+    const matchesSearch = invigilator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (invigilator.professor?.name?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (invigilator.user?.email?.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    // กรองตามประเภท
+    const matchesType = filterType === 'all' || invigilator.type === filterType;
+    
+    // กรองตามภาควิชา
+    const matchesDepartment = !filterDepartment || 
+      invigilator.departmentId === filterDepartment ||
+      invigilator.professor?.departmentId === filterDepartment;
+    
+    return matchesSearch && matchesType && matchesDepartment;
+  });
+
+  // กรองตามคำค้นหา
+  const filteredProfessors = availableProfessors.filter(
+    prof => prof.name.toLowerCase().includes(searchProfessor.toLowerCase())
+  );
+
+  // เพิ่ม component สำหรับแสดงตัวเลือกที่เลือกไว้
+  const ProfessorTag = ({ professor, department, onRemove }: { professor: Professor; department?: Department; onRemove?: () => void }) => (
+    <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+      <span>{professor.name}</span>
+      {department && (
+        <span className="text-xs text-blue-600">({department.name})</span>
+      )}
+      {onRemove && (
+        <button 
+          onClick={onRemove}
+          className="text-blue-800 hover:text-blue-900"
+        >
+          &times;
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="p-6 space-y-6">
       <Toaster/>
@@ -265,6 +329,60 @@ export default function InvigilatorsPage() {
         >
           เพิ่มผู้คุมสอบ
         </button>
+      </div>
+
+      {/* เพิ่มส่วน UI สำหรับการค้นหาและกรอง (ต่อจาก header) */}
+      <div className="flex flex-wrap gap-3 items-center mb-4">
+        <div className="flex-1 min-w-[240px]">
+          <input
+            type="text"
+            placeholder="ค้นหาชื่อ, อีเมล..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        
+        <div className="w-auto">
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">ทุกประเภท</option>
+            <option value="อาจารย์">อาจารย์</option>
+            <option value="บุคลากร">บุคลากร</option>
+          </select>
+        </div>
+        
+        <div className="w-auto">
+          <Select
+            placeholder="กรองตามภาควิชา"
+            options={[
+              { value: '', label: 'ทุกภาควิชา' },
+              ...departments.map(dept => ({ value: dept.id, label: dept.name }))
+            ]}
+            value={filterDepartment ? 
+              { value: filterDepartment, label: departments.find(d => d.id === filterDepartment)?.name || '' } : 
+              { value: '', label: 'ทุกภาควิชา' }}
+            onChange={(option) => setFilterDepartment(option?.value || '')}
+            className="w-[240px]"
+            isClearable
+          />
+        </div>
+        
+        {(searchTerm || filterType !== 'all' || filterDepartment) && (
+          <button
+            onClick={() => {
+              setSearchTerm('');
+              setFilterType('all');
+              setFilterDepartment('');
+            }}
+            className="px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+          >
+            ล้างตัวกรอง
+          </button>
+        )}
       </div>
 
       {/* Table Container */}
@@ -306,7 +424,7 @@ export default function InvigilatorsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {invigilators.map((invigilator) => (
+                  {filteredInvigilators.map((invigilator) => (
                     <tr key={invigilator.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <div className="space-y-1">
@@ -494,18 +612,77 @@ export default function InvigilatorsPage() {
                 )}
 
                 {newInvigilator.type === 'อาจารย์' && (
-                  <div>
-                    <label className="block text-gray-700">อาจารย์</label>
-                    <select
-                      value={newInvigilator.professorId || ''}  // Ensure empty string fallback
-                      onChange={(e) => setNewInvigilator({ ...newInvigilator, professorId: e.target.value })}
-                      className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">เลือกอาจารย์</option>
-                      {professors.map(prof => (
-                        <option key={prof.id} value={prof.id}>{prof.name}</option>
-                      ))}
-                    </select>
+                  <div className="space-y-4">
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          placeholder="ค้นหาอาจารย์..."
+                          value={searchProfessor}
+                          onChange={(e) => setSearchProfessor(e.target.value)}
+                          className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <select
+                          value={filterDepartment}
+                          onChange={(e) => setFilterDepartment(e.target.value)}
+                          className="border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">ทุกภาควิชา</option>
+                          {departments.map(dept => (
+                            <option key={dept.id} value={dept.id}>{dept.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="h-[240px] overflow-y-auto border border-gray-200 rounded-md">
+                      {filteredProfessors.length === 0 ? (
+                        <div className="p-4 text-center text-gray-500">
+                          ไม่พบรายชื่ออาจารย์ที่ตรงกับการค้นหา
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-gray-100">
+                          {filteredProfessors.map(prof => (
+                            <div 
+                              key={prof.id}
+                              className={`p-3 cursor-pointer hover:bg-blue-50 ${selectedProfessor?.id === prof.id ? 'bg-blue-100' : ''}`}
+                              onClick={() => {
+                                setSelectedProfessor(prof);
+                                setNewInvigilator({
+                                  ...newInvigilator,
+                                  professorId: prof.id,
+                                  name: prof.name // ใช้ชื่ออาจารย์เป็นชื่อผู้คุมสอบ
+                                });
+                              }}
+                            >
+                              <div className="font-medium">{prof.name}</div>
+                              <div className="text-sm text-gray-500">
+                                {departments.find(d => d.id === prof.departmentId)?.name || 'ไม่ระบุภาควิชา'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedProfessor && (
+                      <div className="mt-3">
+                        <ProfessorTag 
+                          professor={selectedProfessor}
+                          department={departments.find(d => d.id === selectedProfessor.departmentId)}
+                          onRemove={() => {
+                            setSelectedProfessor(null);
+                            setNewInvigilator({
+                              ...newInvigilator,
+                              professorId: '',
+                              name: '' // ล้างชื่อด้วยเมื่อล้างการเลือก
+                            });
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -513,68 +690,156 @@ export default function InvigilatorsPage() {
           )}
 
           {showEditModal && editInvigilator && (
-            <PopupModal
-              title="แก้ไขข้อมูลผู้คุมสอบ"
-              onClose={() => setShowEditModal(false)}
-              onConfirm={handleEditInvigilator}
-              confirmText="บันทึกการแก้ไข"
-            >
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-gray-700">Name</label>
-                  <input
-                    type="text"
-                    value={editInvigilator.name}
-                    onChange={(e) => setEditInvigilator({ ...editInvigilator, name: e.target.value })}
-                    className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter invigilator name"
-                  />
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[101]">
+              <div className="max-w-3xl w-full bg-white rounded-lg shadow-xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800">แก้ไขข้อมูลผู้คุมสอบ</h3>
                 </div>
-                <div>
-                  <label className="block text-gray-700">Type</label>
-                  <select
-                    value={editInvigilator.type}
-                    onChange={(e) => setEditInvigilator({ ...editInvigilator, type: e.target.value })}
-                    className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  
+                <div className="p-6 max-h-[70vh] overflow-y-auto">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-gray-700 mb-2">ชื่อผู้คุมสอบ</label>
+                      <input
+                        type="text"
+                        value={editInvigilator.name}
+                        onChange={(e) => setEditInvigilator({ ...editInvigilator, name: e.target.value })}
+                        className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+                        placeholder="ระบุชื่อผู้คุมสอบ"
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      <div>
+                        <label className="block text-gray-700 mb-2">ประเภท</label>
+                        <select
+                          value={editInvigilator.type}
+                          onChange={(e) => setEditInvigilator({ ...editInvigilator, type: e.target.value })}
+                          className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+                        >
+                          <option value="บุคลากร">บุคลากร</option>
+                          <option value="อาจารย์">อาจารย์</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-gray-700 mb-2">โควต้า</label>
+                        <input
+                          type="number"
+                          value={editInvigilator.quota || 0}
+                          onChange={(e) => setEditInvigilator({ 
+                            ...editInvigilator, 
+                            quota: parseInt(e.target.value) || 0 
+                          })}
+                          className="w-full border border-gray-300 p-3 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+                          placeholder="ระบุจำนวนโควต้า"
+                        />
+                      </div>
+                    </div>
+
+                    {editInvigilator.type === 'บุคลากร' && (
+                      <div className="mt-4">
+                        <label className="block text-gray-700 mb-2">ภาควิชา</label>
+                        <Select
+                          placeholder="เลือกภาควิชา"
+                          options={departments.map(dept => ({ value: dept.id, label: dept.name }))}
+                          value={editInvigilator.departmentId ? 
+                            { value: editInvigilator.departmentId, label: departments.find(d => d.id === editInvigilator.departmentId)?.name || '' } : 
+                            null}
+                          onChange={(option) => setEditInvigilator({ 
+                            ...editInvigilator, 
+                            departmentId: option?.value || '' 
+                          })}
+                          className="text-lg"
+                          styles={{
+                            control: (base) => ({
+                              ...base,
+                              minHeight: '3rem'
+                            })
+                          }}
+                          isClearable
+                        />
+                      </div>
+                    )}
+
+                    {editInvigilator.type === 'อาจารย์' && (
+                      <div className="mt-4">
+                        <label className="block text-gray-700 mb-2">อาจารย์</label>
+                        <Select
+                          placeholder="ค้นหาและเลือกอาจารย์..."
+                          options={
+                            departments.map(dept => ({
+                              label: dept.name,
+                              options: professors
+                                .filter(prof => prof.departmentId === dept.id)
+                                .map(prof => ({ 
+                                  value: prof.id, 
+                                  label: prof.name,
+                                  department: dept.name
+                                }))
+                            })).filter(group => group.options.length > 0)
+                          }
+                          value={editInvigilator.professorId ? 
+                            { 
+                              value: editInvigilator.professorId, 
+                              label: professors.find(p => p.id === editInvigilator.professorId)?.name || '',
+                              department: departments.find(d => d.id === professors.find(p => p.id === editInvigilator.professorId)?.departmentId)?.name
+                            } : 
+                            null
+                          }
+                          onChange={(option) => setEditInvigilator({ 
+                            ...editInvigilator, 
+                            professorId: option?.value || '' 
+                          })}
+                          className="text-lg"
+                          styles={{
+                            control: (base) => ({
+                              ...base,
+                              minHeight: '3rem'
+                            })
+                          }}
+                          formatOptionLabel={(option) => (
+                            <div className="flex flex-col py-1">
+                              <div>{option.label}</div>
+                              {option.department && (
+                                <div className="text-xs text-gray-500">{option.department}</div>
+                              )}
+                            </div>
+                          )}
+                          isClearable
+                          isSearchable
+                          noOptionsMessage={() => "ไม่พบรายชื่ออาจารย์"}
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                      <h4 className="font-medium text-gray-700 mb-2">ข้อมูลทั่วไป</h4>
+                      <div className="text-sm text-gray-500">
+                        <p>รหัส: {editInvigilator.id}</p>
+                        <p>สร้างเมื่อ: {new Date(editInvigilator.createdAt).toLocaleString('th-TH')}</p>
+                        <p>แก้ไขล่าสุด: {new Date(editInvigilator.updatedAt).toLocaleString('th-TH')}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                  
+                <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowEditModal(false)}
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
                   >
-                    <option value="บุคลากร">บุคลากร</option>
-                    <option value="อาจารย์">อาจารย์</option>
-                  </select>
+                    ยกเลิก
+                  </button>
+                  <button
+                    onClick={handleEditInvigilator}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+                  >
+                    บันทึกการแก้ไข
+                  </button>
                 </div>
-
-                {editInvigilator.type === 'บุคลากร' && (
-                  <div>
-                    <label className="block text-gray-700">Department</label>
-                    <select
-                      value={editInvigilator.departmentId || ''}  // Ensure empty string fallback
-                      onChange={(e) => setEditInvigilator({ ...editInvigilator, departmentId: e.target.value })}
-                      className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select Department</option>
-                      {departments.map(dept => (
-                        <option key={dept.id} value={dept.id}>{dept.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {editInvigilator.type === 'อาจารย์' && (
-                  <div>
-                    <label className="block text-gray-700">Professor</label>
-                    <select
-                      value={editInvigilator.professorId || ''}  // Ensure empty string fallback
-                      onChange={(e) => setEditInvigilator({ ...editInvigilator, professorId: e.target.value })}
-                      className="w-full border border-gray-300 p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select Professor</option>
-                      {professors.map(prof => (
-                        <option key={prof.id} value={prof.id}>{prof.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
               </div>
-            </PopupModal>
+            </div>
           )}
 
           {showDeleteModal && selectedInvigilator && (
