@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
@@ -34,7 +28,6 @@ model Account {
   @@unique([provider, providerAccountId])
   @@map("accounts") // Table name in database is lowercase
 }
-
 model Session {
   id           String   @id @default(cuid()) @map("SessionID")
   sessionToken String   @unique @map("session_token")
@@ -44,7 +37,6 @@ model Session {
 
   @@map("sessions") // Table name in database is lowercase
 }
-
 model User {
   id            String       @id @default(cuid()) @map("UserID")
   name          String?
@@ -62,7 +54,6 @@ model User {
 
   @@map("users") // Table name in database is lowercase
 }
-
 model VerificationToken {
   id         Int      @id @default(autoincrement())
   identifier String
@@ -71,7 +62,6 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
-
 model Subject {
   id            String         @id @default(cuid()) @map("SubjectID")
   code          String         @unique // Subject code
@@ -83,7 +73,6 @@ model Subject {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
-
 model SubjectGroup {
   id                   String                  @id @default(cuid())
   groupNumber          String
@@ -100,7 +89,6 @@ model SubjectGroup {
   @@index([subjectId])
   @@index([professorId])
 }
-
 model Invigilator {
   id            String     @id @default(cuid()) @map("InvigilatorID")
   name          String
@@ -120,7 +108,6 @@ model Invigilator {
   @@index([departmentId])
   @@index([professorId])
 }
-
 model Professor {
   id                     String                  @id @default(cuid()) @map("ProfessorID")
   name                   String                  @unique
@@ -136,7 +123,6 @@ model Professor {
 
   @@index([departmentId])
 }
-
 model SubjectGroupProfessor {
   id             String       @id @default(cuid())
   subjectGroup   SubjectGroup @relation(fields: [subjectGroupId], references: [id])
@@ -146,7 +132,6 @@ model SubjectGroupProfessor {
 
   @@unique([subjectGroupId, professorId])
 }
-
 model Schedule {
   id                  String       @id @default(cuid()) @map("ScheduleID")
   date                DateTime
@@ -179,7 +164,6 @@ model Schedule {
   @@index([subjectGroupId])
   @@index([invigilatorId])
 }
-
 model Department {
   id           String        @id @default(cuid()) @map("DepartmentID")
   name         String        @unique
@@ -193,7 +177,6 @@ model Department {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
-
 model Appeal {
   id              String     @id @default(cuid()) @map("AppealID")
   user            User       @relation(fields: [userId], references: [id])
@@ -213,7 +196,6 @@ model Appeal {
   @@index([userId])
   @@index([scheduleId])
 }
-
 model Room {
   id         String     @id @default(cuid()) @map("RoomID")
   building   String
@@ -224,7 +206,6 @@ model Room {
 
   @@unique([building, roomNumber]) // Add unique constraint for building + roomNumber combination
 }
-
 model Activity {
   id          String   @id @default(cuid()) @map("ActivityID")
   type        String

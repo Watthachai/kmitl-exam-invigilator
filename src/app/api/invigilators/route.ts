@@ -66,11 +66,15 @@ export async function GET() {
       id: `prof_${professor.id}`, // ใส่ prefix เพื่อแยกแยะว่าเป็น ID ของอาจารย์
       name: professor.name,
       type: 'อาจารย์', // ตั้งประเภทเป็นอาจารย์
-      departmentId: professor.department?.id,
+      departmentId: professor.department?.id || null,
       professorId: professor.id,
       quota: 3, // ตั้งค่าโควต้าเริ่มต้น
       assignedQuota: 0, // เริ่มต้นที่ยังไม่มีการกำหนดโควต้า
-      department: professor.department,
+      department: {
+        id: professor.department?.id,
+        name: professor.department?.name,
+        code: professor.department?.code
+      },
       professor: {
         id: professor.id,
         name: professor.name,
