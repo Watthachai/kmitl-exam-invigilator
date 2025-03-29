@@ -344,17 +344,25 @@ export default function DashboardPage() {
             </div>
           ) : (
             availableSchedules.map((schedule) => {
-              // เพิ่ม debug logs
+              // ตรวจสอบว่าผู้ใช้เป็นเจ้าของวิชาหรือไม่ รวมถึง additionalProfessors ด้วย
+              const isProfessor = schedule.subjectGroup.professor?.id === session?.user?.professorId || 
+                                  schedule.subjectGroup.additionalProfessors?.some(
+                                    ap => ap.professor.id === session?.user?.professorId
+                                  );
+
+              // แสดงข้อมูล debug ให้ละเอียดขึ้น
               console.log('Schedule debug:', {
                 scheduleId: schedule.id,
                 subjectCode: schedule.subjectGroup.subject.code,
+                subjectName: schedule.subjectGroup.subject.name,
                 professorId: schedule.subjectGroup.professor?.id,
+                professorName: schedule.subjectGroup.professor?.name,
+                additionalProfessorIds: schedule.subjectGroup.additionalProfessors?.map(ap => ap.professor.id) || [],
                 currentUserProfessorId: session?.user?.professorId,
-                isProfessorMatch: session?.user?.professorId === schedule.subjectGroup.professor?.id
+                isProfessorMatch: isProfessor,
+                debug: schedule._debug // แสดงข้อมูล debug จาก API
               });
 
-              const isProfessor = session?.user?.professorId === schedule.subjectGroup.professor?.id;
-              
               return (
                 <div 
                   key={schedule.id} 
@@ -382,6 +390,11 @@ export default function DashboardPage() {
                       <p className="text-xs md:text-sm text-gray-600 mt-1">
                         ผู้สอน: {schedule.subjectGroup.professor?.name || 'ไม่ระบุ'} 
                         {isProfessor && ' (คุณ)'}
+                      </p>
+                      {/* เพิ่มการแสดงชื่อภาควิชา */}
+                      <p className="text-xs md:text-sm text-gray-600">
+                        ภาควิชา: {schedule.subjectGroup.subject.department.name || 'ไม่ระบุ'}
+                        {schedule._debug?.isPriorityForUser && ' (ภาควิชาของคุณ)'}
                       </p>
                       
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs md:text-sm text-gray-600">
