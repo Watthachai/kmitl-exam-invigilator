@@ -51,6 +51,7 @@ model User {
   activities    Activity[]
   schedules     Schedule[] // Many-to-many relation with schedules
   appeals       Appeal[] // Add this line for Appeal relation
+  sentEmails    EmailLog[] // Add this line for EmailLog relation
 
   @@map("users") // Table name in database is lowercase
 }
@@ -214,5 +215,22 @@ model Activity {
   userId      String?
   user        User?    @relation(fields: [userId], references: [id])
 
+  @@index([createdAt])
+}
+model EmailLog {
+  id            String   @id @default(uuid())
+  type          String   // 'schedule', 'quota', etc.
+  recipientEmail String
+  recipientName  String?
+  status        String   // 'success', 'failed'
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+  
+  // Relations
+  sentById      String?
+  sentBy        User?    @relation(fields: [sentById], references: [id])
+  
+  @@index([type])
+  @@index([status])
   @@index([createdAt])
 }

@@ -15,7 +15,11 @@ export const options: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
+      authorization: {
+        url: "https://accounts.google.com/o/oauth2/auth",
+        params: { prompt: "consent", access_type: "offline", response_type: "code" }
+      }
+    })
   ],
 
   // 3) NextAuth callbacks
@@ -128,4 +132,7 @@ export const options: NextAuthOptions = {
 
   // 5) Make sure you set a secret for NextAuth
   secret: process.env.NEXTAUTH_SECRET,
+
+  // เพิ่ม debug mode เพื่อดูรายละเอียดเพิ่มเติม
+  debug: process.env.NODE_ENV === "development",
 };

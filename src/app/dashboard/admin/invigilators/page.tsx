@@ -216,6 +216,42 @@ export default function InvigilatorsPage() {
     }
   };
 
+  // เพิ่มฟังก์ชัน sendEmailToInvigilator
+  const sendEmailToInvigilator = async (invigilator, emailType) => {
+    // ตรวจสอบว่ามีอีเมลหรือไม่
+    if (!invigilator.user?.email || !invigilator.user.email.endsWith('@kmitl.ac.th')) {
+      toast.error('ไม่พบอีเมล KMITL ของอาจารย์ท่านนี้');
+      return;
+    }
+    
+    try {
+      const toastId = toast.loading('กำลังส่งอีเมล...');
+      
+      const response = await fetch('/api/notifications/individual-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: emailType,
+          userId: invigilator.userId
+        })
+      });
+      
+      const data = await response.json();
+      
+      toast.dismiss(toastId);
+      
+      if (response.ok) {
+        toast.success(data.message || 'ส่งอีเมลเรียบร้อยแล้ว');
+      } else {
+        toast.error(data.error || 'เกิดข้อผิดพลาดในการส่งอีเมล');
+      }
+    } catch (error) {
+      toast.dismiss();
+      toast.error('เกิดข้อผิดพลาดในการส่งอีเมล');
+      console.error('Error sending email:', error);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <Toaster/>
@@ -265,6 +301,7 @@ export default function InvigilatorsPage() {
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">บัญชี Google</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ข้อมูลโควต้า</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">ตารางคุมสอบ</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">อีเมล</th>
                     <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">จัดการ</th>
                   </tr>
                 </thead>
@@ -342,6 +379,36 @@ export default function InvigilatorsPage() {
                             </div>
                           ) : (
                             <span className="text-gray-400">ไม่มีตารางคุมสอบ</span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="space-y-1">
+                          {invigilator.userId && invigilator.user?.email?.endsWith('@kmitl.ac.th') ? (
+                            <>
+                              <div className="font-medium text-gray-900">
+                                {invigilator.user.email}
+                              </div>
+                              <div className="flex gap-2 mt-1">
+                                <button
+                                  onClick={() => sendEmailToInvigilator(invigilator, 'schedule')}
+                                  className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                                  title="ส่งอีเมลแจ้งตารางสอบ"
+                                >
+                                  ส่งตารางสอบ
+                                </button>
+                                <button
+                                  onClick={() => sendEmailToInvigilator(invigilator, 'quota')}
+                                  className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
+                                  title="ส่งอีเมลแจ้งโควต้า"
+                                >
+                                  ส่งโควต้า
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">ไม่มีอีเมล KMITL</span>
                           )}
                         </div>
                       </td>
