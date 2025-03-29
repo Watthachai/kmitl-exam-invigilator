@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { signIn, useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { Button } from "@/app/components/ui/button";
 import { Icons } from "@/app/components/ui/icons";
@@ -13,18 +13,27 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [previousSession, setPreviousSession] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const router = useRouter();
   const { status, data: session } = useSession();
+  const searchParams = useSearchParams();
+  
+  useEffect(() => {
+    const errorParam = searchParams?.get('error');
+    if (errorParam === 'domain') {
+      setErrorMessage('ต้องใช้อีเมล @kmitl.ac.th เท่านั้นในการเข้าสู่ระบบ');
+    } else if (errorParam) {
+      setErrorMessage('เกิดข้อผิดพลาดในการเข้าสู่ระบบ กรุณาลองใหม่อีกครั้ง');
+    }
+  }, [searchParams]);
 
-  // Handle session and routing
   useEffect(() => {
     if (status === "authenticated") {
       const redirectPath = session?.user?.role === "admin" ? "/dashboard/admin" : "/dashboard";
-      router.replace(redirectPath); // Use replace instead of push
+      router.replace(redirectPath);
       return;
     }
     
-    // Only check for previous session if not authenticated
     if (status === "unauthenticated") {
       const sessionToken = document.cookie
         .split('; ')
@@ -36,29 +45,35 @@ export default function LoginPage() {
     }
   }, [status, session, router]);
 
-  // Handle Google login
   const handleGoogleLogin = async () => {
     try {
       setIsLoading(true);
-      await signIn('google', { 
+      setErrorMessage(null);
+      
+      const result = await signIn('google', { 
         redirect: false
       });
+      
+      if (result?.error === 'AccessDenied') {
+        setErrorMessage('ต้องใช้อีเมล @kmitl.ac.th เท่านั้นในการเข้าสู่ระบบ');
+      } else if (result?.error) {
+        setErrorMessage('เกิดข้อผิดพลาดในการเข้าสู่ระบบ กรุณาลองใหม่อีกครั้ง');
+      }
     } catch (error) {
       if (!navigator.onLine) {
         setIsOffline(true);
       }
+      setErrorMessage('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง');
       console.error('Login error:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Handle network status
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
 
-    // Check initial status
     if (typeof window !== 'undefined') {
       setIsOffline(!window.navigator.onLine);
     }
@@ -138,6 +153,15 @@ export default function LoginPage() {
                 สำหรับอาจารย์และเจ้าหน้าที่คุมสอบ
               </p>
             </div>
+
+            {errorMessage && (
+              <div className="w-full bg-red-50 border border-red-200 rounded-lg p-4 text-red-600 text-sm">
+                <div className="flex items-center gap-2">
+                  <Icons.warning className="h-5 w-5 flex-shrink-0" />
+                  <p>{errorMessage}</p>
+                </div>
+              </div>
+            )}
 
             <div className="w-full space-y-4">
               {previousSession && (

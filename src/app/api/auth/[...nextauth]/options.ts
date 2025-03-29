@@ -35,8 +35,8 @@ export const options: NextAuthOptions = {
           await logActivity('LOGIN', `User ${user.email} signed in`);
           return true; // Allow sign-in
         }
-        // Otherwise, block sign-in
-        return false;
+        // ส่งต่อ error ที่ระบุว่าเป็น domain error
+        throw new Error('domain');
       }
       // For other providers, allow sign-in by default
       await logActivity('LOGIN', `User ${user.email} signed in`);
@@ -85,6 +85,20 @@ export const options: NextAuthOptions = {
         };
       }
       return session;
+    },
+
+    /**
+     * error: เรียกเมื่อเกิด error ระหว่างการ sign in
+     */
+    async error({ error, token, account, profile }) {
+      // Log errors for debugging
+      console.error('Auth error:', { error, token, account, profile });
+      
+      // ส่ง custom error message
+      if (error === 'AccessDenied') {
+        return '/login?error=domain';
+      }
+      return '/login?error=default';
     },
   },
 
