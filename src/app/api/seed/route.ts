@@ -102,6 +102,7 @@ export async function POST(request: NextRequest) {
         if (professor.user) {
           await prisma.invigilator.create({
             data: {
+              name: professor.name, // Add professor's name
               userId: professor.user.id,
               departmentId: professor.departmentId,
               professorId: professor.id,
