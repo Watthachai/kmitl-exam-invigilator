@@ -92,7 +92,12 @@ export default function InvigilatorsPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [importPreview, setImportPreview] = useState<any[]>([]);
+  interface ImportPreviewItem {
+    name: string;
+    email?: string;
+  }
+
+  const [importPreview, setImportPreview] = useState<ImportPreviewItem[]>([]);
   const [importDepartmentId, setImportDepartmentId] = useState('');
 
   useEffect(() => {
@@ -384,78 +389,163 @@ export default function InvigilatorsPage() {
     }
   };
 
-  // เพิ่มฟังก์ชันสำหรับการ handle ไฟล์
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // แก้ไขฟังก์ชัน handleFileChange ให้มีการจัดการข้อผิดพลาดที่ดีขึ้น
+
+const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  
+  setImportFile(file);
+  
+  // แสดงตัวอย่างข้อมูลที่จะนำเข้า
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
     
-    setImportFile(file);
+    toast.loading("กำลังวิเคราะห์ไฟล์...");
     
-    // แสดงตัวอย่างข้อมูลที่จะนำเข้า
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
+    const response = await fetch('/api/invigilators/preview-import', {
+      method: 'POST',
+      body: formData,
+    });
+    
+    // ตรวจสอบสถานะการตอบกลับ
+    if (!response.ok) {
+      toast.dismiss();
+      // อ่านข้อมูลความผิดพลาดแบบ text ก่อน เพื่อหลีกเลี่ยงข้อผิดพลาด JSON parsing
+      const errorText = await response.text();
       
-      const response = await fetch('/api/invigilators/preview-import', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to preview file');
+      // ทดลองแปลงเป็น JSON หากเป็นไปได้
+      let errorMessage = 'ไม่สามารถแสดงตัวอย่างไฟล์ได้';
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error || errorJson.message || errorMessage;
+      } catch {
+        // ถ้าไม่สามารถแปลงเป็น JSON ได้ ให้ใช้ข้อความเดิม
+        console.error('Raw error response:', errorText);
       }
       
-      const data = await response.json();
-      setImportPreview(data.preview);
-    } catch (error) {
-      console.error('Error previewing file:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to preview file');
-      setImportFile(null);
+      throw new Error(errorMessage);
     }
-  };
+    
+    // อ่านข้อมูลที่ส่งกลับมาเป็น text ก่อน
+    const responseText = await response.text();
+    
+    // ตรวจสอบว่าข้อความที่ได้รับกลับมาว่างเปล่าหรือไม่
+    if (!responseText || responseText.trim() === '') {
+      toast.dismiss();
+      throw new Error('ได้รับข้อมูลว่างเปล่าจากเซิร์ฟเวอร์');
+    }
+    
+    // แปลงข้อความเป็น JSON
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      toast.dismiss();
+      console.error('Failed to parse JSON response:', responseText);
+      throw new Error('ไม่สามารถอ่านข้อมูลจากเซิร์ฟเวอร์ได้ (รูปแบบไม่ถูกต้อง)');
+    }
+    
+    // ตรวจสอบว่าข้อมูลมี preview หรือไม่
+    if (!data || !data.preview || !Array.isArray(data.preview)) {
+      toast.dismiss();
+      throw new Error('รูปแบบข้อมูลไม่ถูกต้อง: ไม่พบข้อมูลตัวอย่าง');
+    }
+    
+    // ตั้งค่าข้อมูลตัวอย่าง
+    setImportPreview(data.preview);
+    toast.dismiss();
+    toast.success(`พบข้อมูลจำนวน ${data.preview.length} รายการ`);
+    
+  } catch (error) {
+    console.error('Error previewing file:', error);
+    toast.dismiss();
+    toast.error(error instanceof Error ? error.message : 'ไม่สามารถแสดงตัวอย่างไฟล์ได้');
+    setImportFile(null);
+  }
+};
 
   // เพิ่มฟังก์ชันสำหรับการนำเข้าข้อมูล
-  const handleImportInvigilators = async () => {
-    if (!importFile || !importDepartmentId) {
-      toast.error('กรุณาเลือกไฟล์และภาควิชา');
-      return;
-    }
+const handleImportInvigilators = async () => {
+  if (!importFile || !importDepartmentId) {
+    toast.error('กรุณาเลือกไฟล์และภาควิชา');
+    return;
+  }
+  
+  try {
+    setIsImporting(true);
+    toast.loading("กำลังนำเข้าข้อมูล...", { duration: 30000 }); // เพิ่มเวลา toast สำหรับไฟล์ใหญ่
     
-    try {
-      setIsImporting(true);
+    const formData = new FormData();
+    formData.append('file', importFile);
+    formData.append('departmentId', importDepartmentId);
+    
+    const response = await fetch('/api/invigilators/import', {
+      method: 'POST',
+      body: formData,
+    });
+    
+    // อ่านข้อมูลที่ส่งกลับมาก่อนเป็น text
+    const responseText = await response.text();
+    
+    // ตรวจสอบว่าการตอบกลับเป็น OK หรือไม่
+    if (!response.ok) {
+      let errorMessage = 'ไม่สามารถนำเข้าข้อมูลได้';
       
-      const formData = new FormData();
-      formData.append('file', importFile);
-      formData.append('departmentId', importDepartmentId);
-      
-      const response = await fetch('/api/invigilators/import', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to import invigilators');
+      // พยายามแปลงเป็น JSON หากเป็นไปได้
+      if (responseText) {
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          // ถ้าไม่สามารถแปลงเป็น JSON ได้ ใช้ข้อความเดิม
+          console.error('Raw error response:', responseText);
+        }
       }
       
-      const result = await response.json();
-      toast.success(`นำเข้าข้อมูลสำเร็จ ${result.imported} รายการ`);
-      
-      setShowImportModal(false);
-      setImportFile(null);
-      setImportPreview([]);
-      setImportDepartmentId('');
-      
-      // Refresh the data
-      fetchInvigilators();
-    } catch (error) {
-      console.error('Error importing invigilators:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to import invigilators');
-    } finally {
-      setIsImporting(false);
+      throw new Error(errorMessage);
     }
-  };
+    
+    // แปลงข้อความเป็น JSON
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      console.error('Failed to parse JSON response:', responseText);
+      throw new Error('ไม่สามารถอ่านข้อมูลจากเซิร์ฟเวอร์ได้ (รูปแบบไม่ถูกต้อง)');
+    }
+    
+    toast.dismiss();
+    
+    // แสดงผลสำเร็จพร้อมสถิติ
+    if (result.skipped > 0) {
+      toast.success(
+        <div>
+          <p>นำเข้าข้อมูลสำเร็จ {result.imported} รายการ</p>
+          <p className="text-xs">ข้ามข้อมูลที่มีอยู่แล้ว {result.skipped} รายการ</p>
+        </div>, 
+        { duration: 5000 }
+      );
+    } else {
+      toast.success(`นำเข้าข้อมูลสำเร็จ ${result.imported} รายการ`);
+    }
+    
+    setShowImportModal(false);
+    setImportFile(null);
+    setImportPreview([]);
+    setImportDepartmentId('');
+    
+    // Refresh the data
+    fetchInvigilators();
+  } catch (error) {
+    console.error('Error importing invigilators:', error);
+    toast.dismiss();
+    toast.error(error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการนำเข้าข้อมูล');
+  } finally {
+    setIsImporting(false);
+  }
+};
 
   // เพิ่มฟังก์ชันสำหรับดาวน์โหลดเทมเพลต Excel
   const downloadTemplateFile = () => {
@@ -1210,16 +1300,19 @@ export default function InvigilatorsPage() {
   <PopupModal
     title="นำเข้าบุคลากรจากไฟล์ Excel"
     onClose={() => {
-      setShowImportModal(false);
-      setImportFile(null);
-      setImportPreview([]);
-      setImportDepartmentId('');
+      if (!isImporting) {
+        setShowImportModal(false);
+        setImportFile(null);
+        setImportPreview([]);
+        setImportDepartmentId('');
+      }
     }}
     onConfirm={handleImportInvigilators}
     confirmText={isImporting ? "กำลังนำเข้า..." : "นำเข้าข้อมูล"}
     confirmDisabled={isImporting || !importFile || !importDepartmentId}
-    confirmIcon={<FiUpload className="w-4 h-4" />}
+    confirmIcon={isImporting ? <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent" /> : <FiUpload className="w-4 h-4" />}
     maxWidth="3xl"
+    closeDisabled={isImporting}
   >
     <div className="space-y-6">
       <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
@@ -1319,6 +1412,15 @@ export default function InvigilatorsPage() {
               </table>
             </div>
           </div>
+        </div>
+      )}
+      
+      {isImporting && (
+        <div className="bg-blue-50 p-4 rounded-lg flex items-center space-x-3">
+          <div className="animate-spin h-5 w-5 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+          <p className="text-blue-700">
+            กำลังนำเข้าข้อมูล กรุณารอสักครู่... <span className="text-sm">(อาจใช้เวลานานสำหรับไฟล์ขนาดใหญ่)</span>
+          </p>
         </div>
       )}
     </div>

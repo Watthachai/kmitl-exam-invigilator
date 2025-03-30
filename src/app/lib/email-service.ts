@@ -113,7 +113,7 @@ export async function sendExamScheduleNotification(
     // บันทึกความล้มเหลว
     await logActivity(
       'EMAIL_NOTIFICATION',
-      `ส่งอีเมลแจ้งเตือนตารางสอบให้กับ ${userName} <${to}> ล้มเหลว: ${error.message}`,
+      `ส่งอีเมลแจ้งเตือนตารางสอบให้กับ ${userName} <${to}> ล้มเหลว: ${error instanceof Error ? error.message : String(error)}`,
       prisma
     );
 
@@ -205,7 +205,7 @@ export async function sendQuotaNotification(
     // บันทึกความล้มเหลว
     await logActivity(
       'EMAIL_NOTIFICATION',
-      `ส่งอีเมลแจ้งเตือนโควต้าให้กับ ${userName} <${to}> ล้มเหลว: ${error.message}`,
+      `ส่งอีเมลแจ้งเตือนโควต้าให้กับ ${userName} <${to}> ล้มเหลว: ${error instanceof Error ? error.message : String(error)}`,
       prisma
     );
 

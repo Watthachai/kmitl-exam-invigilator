@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from '@/app/lib/prisma';
-import { parseExcelFile } from '@/app/lib/excel-wrapper';
+import { parseExcelFile } from '@/app/lib/excel-wrapper-for-invigilator';
 
 export async function POST(request: Request) {
   try {
@@ -42,43 +42,69 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No valid data found in file' }, { status: 400 });
     }
     
-    // Import data to database
-    const result = await prisma.$transaction(async (tx) => {
-      const imported = [];
-      
-      for (const row of validRows) {
-        // Check if invigilator with the same name already exists
-        const existingInvigilator = await tx.invigilator.findFirst({
-          where: {
-            name: String(row.name),
-            type: 'บุคลากร',
-            departmentId
-          }
-        });
-        
-        if (existingInvigilator) {
-          continue; // Skip if already exists
-        }
-        
-        // Create new invigilator
-        const newInvigilator = await tx.invigilator.create({
-          data: {
-            name: String(row.name ?? ''),
-            type: 'บุคลากร',
-            departmentId,
-            quota: 3, // Default quota
-          }
-        });
-        
-        imported.push(newInvigilator);
+    // ป้องกันการใช้ transaction ที่นานเกินไปหรือไม่สมบูรณ์
+    // โดยใช้วิธีการนำเข้าแบบชุด (batch) แทน
+    let imported = 0;
+    let skipped = 0;
+    
+    // เตรียมข้อมูลเพื่อลดการค้นหาซ้ำ
+    const existingInvigilators = await prisma.invigilator.findMany({
+      where: {
+        type: 'บุคลากร',
+        departmentId
+      },
+      select: {
+        name: true
       }
-      
-      return imported;
     });
+    
+    // สร้าง Set ของชื่อผู้คุมสอบที่มีอยู่แล้วเพื่อการค้นหาที่รวดเร็ว
+    const existingNames = new Set(existingInvigilators.map(inv => inv.name.toLowerCase()));
+    
+    // ประมวลผลข้อมูลเป็นชุด (batch processing)
+    // แบ่งเป็นชุดละ 25 รายการเพื่อไม่ให้ transaction ใหญ่เกินไป
+    const BATCH_SIZE = 25;
+    
+    for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+      const batch = validRows.slice(i, i + BATCH_SIZE);
+      
+      // ใช้ transaction สำหรับแต่ละชุด
+      await prisma.$transaction(async (tx) => {
+        for (const row of batch) {
+          const normalizedName = String(row.name).trim().toLowerCase();
+          
+          // ข้ามรายการที่มีอยู่แล้ว (ใช้ Set แทนการค้นหาใน DB ทุกครั้ง)
+          if (existingNames.has(normalizedName)) {
+            skipped++;
+            continue;
+          }
+          
+          // สร้างผู้คุมสอบใหม่
+          await tx.invigilator.create({
+            data: {
+              name: String(row.name).trim(),
+              type: 'บุคลากร',
+              departmentId,
+              quota: 3, // Default quota
+            }
+          });
+          
+          // เพิ่มชื่อลงใน Set เพื่อไม่ให้มีการสร้างซ้ำในชุดถัดไป
+          existingNames.add(normalizedName);
+          imported++;
+        }
+      });
+      
+      // รอสักเล็กน้อยระหว่างแต่ละชุดเพื่อลดภาระ
+      if (i + BATCH_SIZE < validRows.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
     
     return NextResponse.json({ 
       message: 'Invigilators imported successfully',
-      imported: result.length,
+      imported: imported,
+      skipped: skipped,
       total: validRows.length
     });
   } catch (error) {

@@ -20,7 +20,6 @@ export async function GET() {
             id: true,
             building: true,
             roomNumber: true,
-            capacity: true
           }
         },
         subjectGroup: {
