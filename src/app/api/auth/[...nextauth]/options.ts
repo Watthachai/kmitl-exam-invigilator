@@ -87,19 +87,7 @@ export const options: NextAuthOptions = {
       return session;
     },
 
-    /**
-     * error: เรียกเมื่อเกิด error ระหว่างการ sign in
-     */
-    async error({ error, token, account, profile }) {
-      // Log errors for debugging
-      console.error('Auth error:', { error, token, account, profile });
-      
-      // ส่ง custom error message
-      if (error === 'AccessDenied') {
-        return '/login?error=domain';
-      }
-      return '/login?error=default';
-    },
+    // Removed the invalid `error` callback as it is not supported by NextAuthOptions.
   },
 
   // 4) NextAuth events
