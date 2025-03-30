@@ -49,26 +49,36 @@ export async function POST(request: Request) {
     
     // กรองผู้ใช้ตามเงื่อนไข
     const whereClause: {
-      invigilator: { isNot: null; departmentId?: string; type?: string };
-      email: { endsWith: string; not: null };
+      invigilator?: {
+        isNot: null;
+        some?: {
+          departmentId?: string;
+          type?: string;
+        };
+      };
+      email: {
+        endsWith: string;
+        not: null;
+      };
     } = {
-      invigilator: { 
+      invigilator: {
         isNot: null
       },
-      // เพิ่มเงื่อนไขตรวจสอบอีเมล
       email: {
         endsWith: "@kmitl.ac.th",  // กรองเฉพาะอีเมล KMITL
         not: null                  // ต้องมีค่าอีเมล
       }
     };
     
-    // เพิ่มเงื่อนไขการกรอง
-    if (filters?.departmentId) {
-      whereClause.invigilator.departmentId = filters.departmentId;
-    }
-    
-    if (filters?.type) {
-      whereClause.invigilator.type = filters.type;
+    // เพิ่มเงื่อนไขการกรองสำหรับ invigilator
+    if (filters?.departmentId || filters?.type) {
+      whereClause.invigilator = {
+        isNot: null,
+        some: {
+          ...(filters?.departmentId && { departmentId: filters.departmentId }),
+          ...(filters?.type !== undefined ? { type: filters.type } : {})
+        }
+      };
     }
     
     // ดึงข้อมูลผู้ใช้ตามเงื่อนไข

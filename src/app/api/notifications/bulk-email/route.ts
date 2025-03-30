@@ -18,8 +18,7 @@ export async function POST(request: Request) {
     
     // สร้าง whereClause สำหรับค้นหาผู้ใช้
     const whereClause: {
-      invigilator: {
-        isNot: null;
+      invigilator?: {
         departmentId?: string;
         type?: string;
       };
@@ -28,18 +27,25 @@ export async function POST(request: Request) {
         not?: null;
       };
     } = {
-      invigilator: { 
-        isNot: null
-      }
+      ...(filters?.departmentId || filters?.type ? { 
+        invigilator: {
+          ...(filters?.departmentId && { departmentId: filters.departmentId }),
+          ...(filters?.type && { type: filters.type })
+        }
+      } : {})
     };
     
     // เพิ่มเงื่อนไขตามที่ระบุใน filters
     if (filters?.departmentId) {
-      whereClause.invigilator.departmentId = filters.departmentId;
+      if (whereClause.invigilator) {
+        whereClause.invigilator.departmentId = filters.departmentId;
+      }
     }
     
     if (filters?.type) {
-      whereClause.invigilator.type = filters.type;
+      if (whereClause.invigilator) {
+        whereClause.invigilator.type = filters.type;
+      }
     }
     
     // กรองตามประเภทอีเมล
@@ -87,7 +93,12 @@ export async function POST(request: Request) {
     }
     
     // เริ่มส่งอีเมล
-    const results = {
+    const results: {
+      total: number;
+      success: number;
+      failed: number;
+      failures: string[];
+    } = {
       total: users.length,
       success: 0,
       failed: 0,
@@ -149,7 +160,8 @@ export async function POST(request: Request) {
       } catch (error) {
         console.error(`Failed to send email to ${user.email}:`, error);
         results.failed++;
-        results.failures.push(`${user.name || user.email}: ${error.message}`);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        results.failures.push(`${user.name || user.email}: ${errorMessage}`);
       }
     }
     
