@@ -8,9 +8,6 @@ import { ImSpinner8 } from 'react-icons/im';
 import { FiDatabase } from 'react-icons/fi';
 import Select from 'react-select';
 
-// เพิ่ม import สำหรับการจัดการไฟล์
-import { FiUpload, FiFileText, FiDownload } from 'react-icons/fi';
-
 interface Invigilator {
   id: string;
   name: string;
@@ -87,13 +84,6 @@ export default function InvigilatorsPage() {
   const [mergeTargetId, setMergeTargetId] = useState<string | null>(null);
   const [mergeSearchTerm, setMergeSearchTerm] = useState("");
   const [filteredInvigilatorsForMerge, setFilteredInvigilatorsForMerge] = useState<Invigilator[]>([]);
-
-  // เพิ่ม state สำหรับ Modal นำเข้าไฟล์
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importPreview, setImportPreview] = useState<any[]>([]);
-  const [importDepartmentId, setImportDepartmentId] = useState('');
 
   useEffect(() => {
     fetchInvigilators();
@@ -384,98 +374,6 @@ export default function InvigilatorsPage() {
     }
   };
 
-  // เพิ่มฟังก์ชันสำหรับการ handle ไฟล์
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setImportFile(file);
-    
-    // แสดงตัวอย่างข้อมูลที่จะนำเข้า
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const response = await fetch('/api/invigilators/preview-import', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to preview file');
-      }
-      
-      const data = await response.json();
-      setImportPreview(data.preview);
-    } catch (error) {
-      console.error('Error previewing file:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to preview file');
-      setImportFile(null);
-    }
-  };
-
-  // เพิ่มฟังก์ชันสำหรับการนำเข้าข้อมูล
-  const handleImportInvigilators = async () => {
-    if (!importFile || !importDepartmentId) {
-      toast.error('กรุณาเลือกไฟล์และภาควิชา');
-      return;
-    }
-    
-    try {
-      setIsImporting(true);
-      
-      const formData = new FormData();
-      formData.append('file', importFile);
-      formData.append('departmentId', importDepartmentId);
-      
-      const response = await fetch('/api/invigilators/import', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to import invigilators');
-      }
-      
-      const result = await response.json();
-      toast.success(`นำเข้าข้อมูลสำเร็จ ${result.imported} รายการ`);
-      
-      setShowImportModal(false);
-      setImportFile(null);
-      setImportPreview([]);
-      setImportDepartmentId('');
-      
-      // Refresh the data
-      fetchInvigilators();
-    } catch (error) {
-      console.error('Error importing invigilators:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to import invigilators');
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-  // เพิ่มฟังก์ชันสำหรับดาวน์โหลดเทมเพลต Excel
-  const downloadTemplateFile = () => {
-    fetch('/api/invigilators/template')
-      .then(response => response.blob())
-      .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'invigilator_import_template.xlsx';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      })
-      .catch(error => {
-        console.error('Error downloading template:', error);
-        toast.error('Failed to download template');
-      });
-  };
-
   // เพิ่ม component สำหรับแสดงตัวเลือกที่เลือกไว้
   const ProfessorTag = ({ professor, department, onRemove }: { professor: Professor; department?: Department; onRemove?: () => void }) => (
     <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
@@ -501,21 +399,12 @@ export default function InvigilatorsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">รายการผู้คุมสอบ</h1>
-        <div className="flex gap-2">
-          <button 
-            className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors flex items-center gap-2"
-            onClick={() => setShowImportModal(true)}
-          >
-            <FiUpload className="w-4 h-4" />
-            นำเข้าบุคลากร
-          </button>
-          <button 
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-            onClick={() => setShowAddModal(true)}
-          >
-            เพิ่มผู้คุมสอบ
-          </button>
-        </div>
+        <button 
+          className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+          onClick={() => setShowAddModal(true)}
+        >
+          เพิ่มผู้คุมสอบ
+        </button>
       </div>
 
       {/* เพิ่มส่วน UI สำหรับการค้นหาและกรอง (ต่อจาก header) */}
@@ -1206,124 +1095,6 @@ export default function InvigilatorsPage() {
           )}
         </div>
       )}
-{showImportModal && (
-  <PopupModal
-    title="นำเข้าบุคลากรจากไฟล์ Excel"
-    onClose={() => {
-      setShowImportModal(false);
-      setImportFile(null);
-      setImportPreview([]);
-      setImportDepartmentId('');
-    }}
-    onConfirm={handleImportInvigilators}
-    confirmText={isImporting ? "กำลังนำเข้า..." : "นำเข้าข้อมูล"}
-    confirmDisabled={isImporting || !importFile || !importDepartmentId}
-    confirmIcon={<FiUpload className="w-4 h-4" />}
-    maxWidth="3xl"
-  >
-    <div className="space-y-6">
-      <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-        <h3 className="font-medium text-blue-800">คำแนะนำการนำเข้าข้อมูล</h3>
-        <p className="text-sm text-blue-700 mt-1">
-          คุณสามารถนำเข้าข้อมูลบุคลากรจากไฟล์ Excel โดยไฟล์ต้องมีคอลัมน์ ชื่อ-นามสกุล และสามารถมีคอลัมน์อีเมลได้ (ถ้ามี)
-          บุคลากรทั้งหมดจะถูกเพิ่มเป็นประเภท &quot;บุคลากร&quot; และคุณต้องเลือกภาควิชาที่สังกัด
-        </p>
-        <button
-          onClick={downloadTemplateFile}
-          className="flex items-center gap-2 text-sm text-blue-700 mt-2 hover:text-blue-800"
-        >
-          <FiDownload className="w-4 h-4" />
-          ดาวน์โหลดเทมเพลตไฟล์ Excel
-        </button>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            เลือกไฟล์ Excel (.xlsx)
-          </label>
-          <div className="flex items-center">
-            <label className="flex-1">
-              <div className="border border-gray-300 rounded-lg px-4 py-10 text-center cursor-pointer hover:bg-gray-50">
-                {importFile ? (
-                  <div className="text-blue-500">
-                    <FiFileText className="w-10 h-10 mx-auto" />
-                    <p className="mt-2 font-medium">{importFile.name}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {(importFile.size / 1024).toFixed(2)} KB
-                    </p>
-                  </div>
-                ) : (
-                  <div className="text-gray-400">
-                    <FiUpload className="w-10 h-10 mx-auto" />
-                    <p className="mt-2">คลิกเพื่อเลือกไฟล์</p>
-                    <p className="text-xs mt-1">รองรับไฟล์ .xlsx เท่านั้น</p>
-                  </div>
-                )}
-              </div>
-              <input
-                type="file"
-                accept=".xlsx"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-            </label>
-          </div>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            เลือกภาควิชา/หน่วยงานที่สังกัด
-          </label>
-          <Select
-            placeholder="เลือกภาควิชา/หน่วยงาน"
-            options={departments.map(dept => ({ 
-              value: dept.id, 
-              label: dept.name 
-            }))}
-            value={importDepartmentId ? 
-              { value: importDepartmentId, label: departments.find(d => d.id === importDepartmentId)?.name || '' } : 
-              null}
-            onChange={(option) => setImportDepartmentId(option?.value || '')}
-            className="w-full"
-            isClearable
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            บุคลากรทั้งหมดที่นำเข้าจะถูกกำหนดให้สังกัดในภาควิชา/หน่วยงานนี้
-          </p>
-        </div>
-      </div>
-      
-      {importPreview.length > 0 && (
-        <div>
-          <h3 className="font-medium text-gray-700 mb-2">ตัวอย่างข้อมูลที่จะนำเข้า ({importPreview.length} รายการ)</h3>
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <div className="max-h-60 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left">#</th>
-                    <th className="px-4 py-2 text-left">ชื่อ-นามสกุล</th>
-                    <th className="px-4 py-2 text-left">อีเมล (ถ้ามี)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {importPreview.map((item, index) => (
-                    <tr key={index} className="border-t border-gray-200">
-                      <td className="px-4 py-2">{index + 1}</td>
-                      <td className="px-4 py-2">{item.name}</td>
-                      <td className="px-4 py-2">{item.email || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  </PopupModal>
-)}
     </div>
   );
 }

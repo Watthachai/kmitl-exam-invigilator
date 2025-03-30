@@ -9,15 +9,6 @@ import { utils as XLSXUtils, write } from "xlsx";
 import  SearchableInvigilatorSelect from "@/app/components/ui/search-dropdown";
 import debounce from 'lodash/debounce';
 
-interface AssignmentStats {
-  totalSchedules: number;
-  assignedSchedules: number;
-  unassignedSchedules: number;
-  facultyAssignments: number;
-  staffAssignments: number;
-  schedulesByDepartment?: { [key: string]: number };
-}
-
 interface SubjectGroup {
   id: string;
   groupNumber: string;
@@ -183,15 +174,6 @@ export default function ExamsPage() {
     academicYear: "",
     semester: "",
   });
-
-  const [assignmentStats, setAssignmentStats] = useState<AssignmentStats>({
-    totalSchedules: 0,
-    assignedSchedules: 0,
-    unassignedSchedules: 0,
-    facultyAssignments: 0,
-    staffAssignments: 0
-  });
-  const [showAssignmentStatsModal, setShowAssignmentStatsModal] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -901,192 +883,166 @@ export default function ExamsPage() {
   // ฟังก์ชันสำหรับสุ่มและจัดสรรผู้คุมสอบ
   // แก้ไขฟังก์ชัน handleRandomAssign ใน component ExamsPage
   const handleRandomAssign = async () => {
-    if (previewAssignments.length > 0) {
-      // ถ้ามีการ preview แล้ว ให้บันทึกการมอบหมาย
-      try {
-        toast.loading("กำลังบันทึกข้อมูล...");
-        
-        // แก้ไขโครงสร้างข้อมูลให้ใช้ scheduleId แทน id
-        const formattedAssignments = previewAssignments.map(assignment => ({
-          scheduleId: assignment.scheduleId,
-          newInvigilatorId: assignment.newInvigilatorId
-        }));
-        
-        console.log('Sending assignments:', formattedAssignments);
-        
-        // ส่งข้อมูลไปบันทึกที่ API
-        const response = await fetch("/api/schedules/bulk-assign", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ assignments: formattedAssignments }),
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "ไม่สามารถบันทึกข้อมูลได้");
-        }
-        
-        toast.dismiss();
-        toast.success(`บันทึกข้อมูลสำเร็จ ${previewAssignments.length} รายการ`);
-        setShowRandomAssignModal(false);
-        setPreviewAssignments([]);
-        
-        await Promise.all([fetchSchedules(), fetchInvigilators()]);
-      } catch (error) {
-        toast.dismiss();
-        toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+  if (previewAssignments.length > 0) {
+    // ถ้ามีการ preview แล้ว ให้บันทึกการมอบหมาย
+    try {
+      toast.loading("กำลังบันทึกข้อมูล...");
+      
+      // แก้ไขโครงสร้างข้อมูลให้ใช้ scheduleId แทน id
+      const formattedAssignments = previewAssignments.map(assignment => ({
+        scheduleId: assignment.scheduleId,
+        newInvigilatorId: assignment.newInvigilatorId
+      }));
+      
+      console.log('Sending assignments:', formattedAssignments);
+      
+      // ส่งข้อมูลไปบันทึกที่ API
+      const response = await fetch("/api/schedules/bulk-assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignments: formattedAssignments }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "ไม่สามารถบันทึกข้อมูลได้");
       }
-    } else {
-      // ถ้ายังไม่มี preview ให้ดึงข้อมูลเพื่อแสดงตัวอย่าง
-      try {
-        toast.loading("กำลังประมวลผล...");
-        
-        console.log("Sending config to API:", randomAssignConfig);
-        
-        // ส่งเงื่อนไขการกรองไปยัง API รวมถึงตัวเลือกเพิ่มเติมใหม่
-        const response = await fetch("/api/schedules/random-assign", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...randomAssignConfig,
-            // เพิ่มข้อมูลเกี่ยวกับตัวเลือกใหม่
-            timeConstraints: {
-              avoidSameTimeSlot: randomAssignConfig.avoidSameTimeSlot,
-              allowSameDayDifferentSlot: randomAssignConfig.allowSameDayDifferentSlot
-            }
-          }),
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "ไม่สามารถดึงข้อมูลได้");
-        }
-        
-        const data = await response.json();
-        console.log("Received data from API:", data);
-        
-        // ตรวจสอบว่าได้รับข้อมูลแบบที่คาดหวังหรือไม่
-        if (!data || !data.assignments) {
-          throw new Error("ข้อมูลที่ได้รับไม่ถูกต้อง: " + JSON.stringify(data));
-        }
-        
-        // ตรวจสอบว่าได้รับข้อมูล array หรือไม่
-        if (!Array.isArray(data.assignments)) {
-          console.warn("API ไม่ได้ส่งข้อมูลเป็น array:", data.assignments);
-          // สร้าง array เปล่าเพื่อป้องกันข้อผิดพลาด
-          data.assignments = [];
-        }
-        
-        if (data.assignments.length === 0) {
-          toast.dismiss();
-          
-          // ดึงข้อมูลสถิติการจัดสรร
-          const assignStats = data.statistics || {
-            totalSchedules: 0,
-            assignedSchedules: 0,
-            unassignedSchedules: 0,
-            facultyAssignments: 0,
-            staffAssignments: 0
-          };
-          
-          // แสดงกล่องข้อมูลแทนที่จะแค่แสดง toast
-          setPreviewAssignments([]); // ให้แน่ใจว่า preview ว่างเปล่า
-          
-          // เก็บข้อมูลสถิติลงใน state ชั่วคราวเพื่อแสดงผล
-          setAssignmentStats(assignStats);
-          setShowAssignmentStatsModal(true);
-          return;
-        }
-        
-        // ตรวจสอบความขัดแย้งก่อนแสดงผล
-        const assignmentsByInvigilator = new Map();
-        const timeSlotConflicts = [];
-  
-        // จัดกลุ่มตามผู้คุมสอบ
-        data.assignments.forEach((assignment) => {
-          if (!assignmentsByInvigilator.has(assignment.newInvigilatorId)) {
-            assignmentsByInvigilator.set(assignment.newInvigilatorId, []);
-          }
-          assignmentsByInvigilator.get(assignment.newInvigilatorId).push(assignment);
-        });
-  
-        // ตรวจสอบความขัดแย้งในแต่ละกลุ่ม
-        assignmentsByInvigilator.forEach((assignments) => {
-          // จัดเรียงตามวันและเวลา
-          assignments.sort((a, b) => {
-            const dateA = new Date(a.date);
-            const dateB = new Date(b.date);
-            if (dateA.getTime() !== dateB.getTime()) {
-              return dateA.getTime() - dateB.getTime();
-            }
-            // ถ้าวันเดียวกัน เรียงตาม timeSlot
-            return a.timeSlot.localeCompare(b.timeSlot);
-          });
-          
-          // ตรวจสอบความขัดแย้ง
-          for (let i = 0; i < assignments.length; i++) {
-            const current = assignments[i];
-            
-            // เตรียมตรวจสอบความขัดแย้ง
-            const currentDate = new Date(current.date).toDateString();
-            const currentTime = current.timeSlot;
-            
-            // ตรวจสอบกับรายการอื่นๆ
-            for (let j = i + 1; j < assignments.length; j++) {
-              const other = assignments[j];
-              const otherDate = new Date(other.date).toDateString();
-              const otherTime = other.timeSlot;
-              
-              // ถ้าวันเดียวกันและเวลาเดียวกัน = ขัดแย้ง
-              if (currentDate === otherDate && currentTime === otherTime) {
-                console.log(`ความขัดแย้ง: ${current.newInvigilator} ได้รับมอบหมายให้คุมสอบซ้ำซ้อนในวันและเวลาเดียวกัน`);
-                
-                // เพิ่มข้อมูลความขัดแย้ง
-                if (!current.timeConflicts) current.timeConflicts = [];
-                if (!other.timeConflicts) other.timeConflicts = [];
-                
-                current.timeConflicts.push({
-                  date: formatThaiDate(new Date(other.date)),
-                  timeSlot: other.timeSlot,
-                  subjectCode: other.subjectCode
-                });
-                
-                other.timeConflicts.push({
-                  date: formatThaiDate(new Date(current.date)),
-                  timeSlot: current.timeSlot,
-                  subjectCode: current.subjectCode
-                });
-                
-                timeSlotConflicts.push({current, other});
-              }
-            }
-          }
-        });
-  
-        // แจ้งเตือนถ้าพบความขัดแย้ง
-        if (timeSlotConflicts.length > 0) {
-          toast(`พบความขัดแย้งของเวลาคุมสอบ ${timeSlotConflicts.length} คู่ กรุณาตรวจสอบและแก้ไข`, {
-            duration: 5000,
-            icon: '⚠️',
-            style: {
-              background: '#fef3c7',
-              color: '#92400e',
-            },
-          });
-        }
-  
-        // กำหนดข้อมูลที่มีการตรวจสอบแล้วให้กับ state
-        setPreviewAssignments(data.assignments);
-        console.log("Set preview assignments, new length:", data.assignments.length);
-        toast.dismiss();
-        toast.success(`พบข้อมูลทั้งหมด ${data.assignments.length} รายการ`);
-      } catch (error) {
-        console.error("Error fetching assignments:", error);
-        toast.dismiss();
-        toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาดในการดึงข้อมูล");
-      }
+      
+      toast.dismiss();
+      toast.success(`บันทึกข้อมูลสำเร็จ ${previewAssignments.length} รายการ`);
+      setShowRandomAssignModal(false);
+      setPreviewAssignments([]);
+      
+      await Promise.all([fetchSchedules(), fetchInvigilators()]);
+    } catch (error) {
+      toast.dismiss();
+      toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
     }
-  };
+  } else {
+    // ถ้ายังไม่มี preview ให้ดึงข้อมูลเพื่อแสดงตัวอย่าง
+    try {
+      toast.loading("กำลังประมวลผล...");
+      
+      console.log("Sending config to API:", randomAssignConfig);
+      
+      // ส่งเงื่อนไขการกรองไปยัง API รวมถึงตัวเลือกเพิ่มเติมใหม่
+      const response = await fetch("/api/schedules/random-assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...randomAssignConfig,
+          // เพิ่มข้อมูลเกี่ยวกับตัวเลือกใหม่
+          timeConstraints: {
+            avoidSameTimeSlot: randomAssignConfig.avoidSameTimeSlot,
+            allowSameDayDifferentSlot: randomAssignConfig.allowSameDayDifferentSlot
+          }
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "ไม่สามารถดึงข้อมูลได้");
+      }
+      
+      const data = await response.json();
+      console.log("Received data from API:", data);
+      
+      // ตรวจสอบว่าได้รับข้อมูลแบบที่คาดหวังหรือไม่
+      if (!data || !data.assignments || !Array.isArray(data.assignments)) {
+        throw new Error("ข้อมูลที่ได้รับไม่ถูกต้อง: " + JSON.stringify(data));
+      }
+      
+      if (data.assignments.length === 0) {
+        toast.dismiss();
+        toast("ไม่พบข้อมูลที่ตรงตามเงื่อนไข กรุณาลองเปลี่ยนเงื่อนไขการค้นหา");
+        return;
+      }
+      
+      // ตรวจสอบความขัดแย้งก่อนแสดงผล
+      const assignmentsByInvigilator = new Map();
+      const timeSlotConflicts = [];
+
+      // จัดกลุ่มตามผู้คุมสอบ
+      data.assignments.forEach((assignment: AssignmentPreview) => {
+        if (!assignmentsByInvigilator.has(assignment.newInvigilatorId)) {
+          assignmentsByInvigilator.set(assignment.newInvigilatorId, [] as AssignmentPreview[]);
+        }
+        assignmentsByInvigilator.get(assignment.newInvigilatorId)?.push(assignment);
+      });
+
+      // ตรวจสอบความขัดแย้งในแต่ละกลุ่ม
+      assignmentsByInvigilator.forEach((assignments) => {
+        // จัดเรียงตามวันและเวลา
+        assignments.sort((a: AssignmentPreview, b: AssignmentPreview): number => {
+          const dateA: Date = new Date(a.date);
+          const dateB: Date = new Date(b.date);
+          if (dateA.getTime() !== dateB.getTime()) {
+            return dateA.getTime() - dateB.getTime();
+          }
+          // ถ้าวันเดียวกัน เรียงตาม timeSlot
+          return a.timeSlot.localeCompare(b.timeSlot);
+        });
+        
+        // ตรวจสอบความขัดแย้ง
+        for (let i = 0; i < assignments.length; i++) {
+          const current = assignments[i];
+          
+          // เตรียมตรวจสอบความขัดแย้ง
+          const currentDate = new Date(current.date).toDateString();
+          const currentTime = current.timeSlot;
+          
+          // ตรวจสอบกับรายการอื่นๆ
+          for (let j = i + 1; j < assignments.length; j++) {
+            const other = assignments[j];
+            const otherDate = new Date(other.date).toDateString();
+            const otherTime = other.timeSlot;
+            
+            // ถ้าวันเดียวกันและเวลาเดียวกัน = ขัดแย้ง
+            if (currentDate === otherDate && currentTime === otherTime) {
+              console.log(`ความขัดแย้ง: ${current.newInvigilator} ได้รับมอบหมายให้คุมสอบซ้ำซ้อนในวันและเวลาเดียวกัน`);
+              
+              // เพิ่มข้อมูลความขัดแย้ง
+              if (!current.timeConflicts) current.timeConflicts = [];
+              if (!other.timeConflicts) other.timeConflicts = [];
+              
+              current.timeConflicts.push({
+                date: formatThaiDate(new Date(other.date)),
+                timeSlot: other.timeSlot,
+                subjectCode: other.subjectCode
+              });
+              
+              other.timeConflicts.push({
+                date: formatThaiDate(new Date(current.date)),
+                timeSlot: current.timeSlot,
+                subjectCode: current.subjectCode
+              });
+              
+              timeSlotConflicts.push({current, other});
+            }
+          }
+        }
+      });
+
+      // แจ้งเตือนถ้าพบความขัดแย้ง
+      if (timeSlotConflicts.length > 0) {
+        toast(`พบความขัดแย้งของเวลาคุมสอบ ${timeSlotConflicts.length} คู่ กรุณาตรวจสอบและแก้ไข`, {
+          icon: '⚠️',
+          duration: 5000,
+        });
+      }
+
+      // กำหนดข้อมูลที่มีการตรวจสอบแล้วให้กับ state
+      setPreviewAssignments(data.assignments);
+      console.log("Set preview assignments, new length:", data.assignments.length);
+      toast.dismiss();
+      toast.success(`พบข้อมูลทั้งหมด ${data.assignments.length} รายการ`);
+    } catch (error) {
+      console.error("Error fetching assignments:", error);
+      toast.dismiss();
+      toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาดในการดึงข้อมูล");
+    }
+  }
+};
 
   // แก้ไขฟังก์ชัน handleChangeAssignedInvigilator 
   const handleChangeAssignedInvigilator = (index: number) => {
@@ -2868,102 +2824,6 @@ const handleEditConfirm = () => {
       </div>
     </PopupModal>
   )}
-
-{/* Modal แสดงสถิติการจัดสรร */}
-{showAssignmentStatsModal && (
-  <PopupModal
-    title="สถานะการจัดสรรผู้คุมสอบ"
-    onClose={() => setShowAssignmentStatsModal(false)}
-    onConfirm={() => setShowAssignmentStatsModal(false)}
-    confirmText="ปิด"
-  >
-    <div className="space-y-6">
-      <div className="bg-blue-50 p-4 rounded-lg">
-        <h3 className="font-medium text-blue-700">ข้อมูลการจัดสรรผู้คุมสอบ</h3>
-        <p className="text-sm text-blue-600 mt-1">
-          ไม่พบข้อมูลที่สามารถจัดสรรได้เพิ่มเติม ด้านล่างนี้เป็นสถานะปัจจุบันของการจัดสรรผู้คุมสอบ
-        </p>
-      </div>
-      
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <p className="text-xs text-gray-500">ตารางสอบทั้งหมด</p>
-          <p className="text-2xl font-bold">{assignmentStats.totalSchedules}</p>
-        </div>
-        
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <p className="text-xs text-gray-500">จัดสรรแล้ว</p>
-          <p className="text-2xl font-bold text-green-600">{assignmentStats.assignedSchedules}</p>
-          <p className="text-xs text-gray-400 mt-1">
-            {Math.round((assignmentStats.assignedSchedules / assignmentStats.totalSchedules) * 100) || 0}% ของทั้งหมด
-          </p>
-        </div>
-        
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <p className="text-xs text-gray-500">รอการจัดสรร</p>
-          <p className="text-2xl font-bold text-yellow-600">{assignmentStats.unassignedSchedules}</p>
-          <p className="text-xs text-gray-400 mt-1">
-            {Math.round((assignmentStats.unassignedSchedules / assignmentStats.totalSchedules) * 100) || 0}% ของทั้งหมด
-          </p>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
-          <p className="text-sm text-blue-700 font-medium">จัดสรรให้อาจารย์</p>
-          <p className="text-xl font-bold text-blue-600 mt-1">{assignmentStats.facultyAssignments} รายการ</p>
-          <div className="w-full h-3 bg-blue-100 rounded-full mt-2">
-            <div 
-              className="h-full bg-blue-500 rounded-full" 
-              style={{ width: `${Math.round((assignmentStats.facultyAssignments / assignmentStats.assignedSchedules) * 100) || 0}%` }}
-            ></div>
-          </div>
-        </div>
-        
-        <div className="bg-purple-50 rounded-lg border border-purple-200 p-4">
-          <p className="text-sm text-purple-700 font-medium">จัดสรรให้บุคลากร</p>
-          <p className="text-xl font-bold text-purple-600 mt-1">{assignmentStats.staffAssignments} รายการ</p>
-          <div className="w-full h-3 bg-purple-100 rounded-full mt-2">
-            <div 
-              className="h-full bg-purple-500 rounded-full" 
-              style={{ width: `${Math.round((assignmentStats.staffAssignments / assignmentStats.assignedSchedules) * 100) || 0}%` }}
-            ></div>
-          </div>
-        </div>
-      </div>
-      
-      {assignmentStats.schedulesByDepartment && (
-        <div>
-          <h4 className="font-medium text-gray-700 mb-2">จำนวนการจัดสรรแยกตามภาควิชา</h4>
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left">ภาควิชา</th>
-                  <th className="px-4 py-2 text-right">จำนวน</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(assignmentStats.schedulesByDepartment).map(([dept, count]) => (
-                  <tr key={dept} className="border-t border-gray-200">
-                    <td className="px-4 py-2">{dept}</td>
-                    <td className="px-4 py-2 text-right font-medium">{count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-      
-      <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-        <p className="text-sm text-yellow-700">
-          <span className="font-medium">หมายเหตุ:</span> ระบบได้จัดสรรผู้คุมสอบให้ครบถ้วนตามเงื่อนไขที่กำหนดแล้ว หากต้องการจัดสรรเพิ่มเติม กรุณาแก้ไขเงื่อนไขการกรอง หรือจัดสรรโดยใช้วิธีการกำหนดเอง
-        </p>
-      </div>
-    </div>
-  </PopupModal>
-)}
     </div>
   );
 }
