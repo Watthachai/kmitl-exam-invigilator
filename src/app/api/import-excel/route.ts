@@ -179,18 +179,36 @@ async function upsertSubject(
   const genEdPrefixes = ['901', '902', '903', '904', '905', '906', '966'];
   const isGenEd = genEdPrefixes.some(prefix => code.startsWith(prefix));
 
+  // ค้นหาวิชาที่มีอยู่แล้วก่อน เพื่อรักษาชื่อเดิมถ้าชื่อใหม่เป็นค่าว่าง
+  const existingSubject = await tx.subject.findUnique({
+    where: { code }
+  });
+
+  // กำหนดชื่อที่จะใช้
+  let subjectName = name;
+  if (!subjectName && existingSubject?.name) {
+    // ถ้าชื่อใหม่ว่างแต่มีชื่อเดิมในฐานข้อมูล ให้ใช้ชื่อเดิม
+    subjectName = existingSubject.name;
+    console.log(`Keeping existing subject name: ${subjectName} for code: ${code}`);
+  } else if (!subjectName) {
+    // ถ้าไม่มีทั้งชื่อใหม่และชื่อเดิม ให้ใช้รหัสวิชาเป็นชื่อ
+    subjectName = `รหัสวิชา ${code}`;
+    console.log(`Using code as subject name for: ${code}`);
+  }
+
   const subject = await tx.subject.upsert({
     where: { code },
     create: {
       code,
-      name,
+      name: subjectName,
       departmentId: department.id,
-      isGenEd // เพิ่ม flag isGenEd
+      isGenEd
     },
     update: {
-      name,
+      // อัพเดทชื่อเฉพาะเมื่อมีการระบุชื่อใหม่ที่ไม่ใช่ค่าว่าง
+      ...(name ? { name: subjectName } : {}),
       departmentId: department.id,
-      isGenEd // อัพเดท flag isGenEd
+      isGenEd
     }
   });
 
@@ -223,16 +241,37 @@ async function processExamData(
     const roomKey = `${row.อาคาร}_${row.ห้อง}_${examDate}_${scheduleOption}`;
     
     // ดำเนินการปกติ
-    // Update the relevant part in processExamData
-const [subjectCode, ...subjectNameParts] = row.วิชา.split(' ');
-const trimmedSubjectCode = subjectCode === 'ไม่ระบุรหัสวิชา' 
-  ? 'UNKNOWN' 
-  : subjectCode.trim();
+    // แก้ไขส่วนการแยกรหัสวิชาและชื่อวิชา
+    const [subjectCode, ...subjectNameParts] = row.วิชา.split(' ');
+    const trimmedSubjectCode = subjectCode === 'ไม่ระบุรหัสวิชา' 
+      ? 'UNKNOWN' 
+      : subjectCode.trim();
 
-    // Get subject and department first
+    // ตรวจสอบและจัดการกับชื่อวิชาที่อาจเป็นค่าว่าง
+    let subjectName = subjectNameParts.join(' ').trim();
+
+    // ถ้าไม่มีชื่อวิชา ให้ตรวจสอบจากฐานข้อมูลก่อน
+    if (!subjectName) {
+      // ค้นหาวิชาจากรหัสวิชาในฐานข้อมูล
+      const existingSubject = await tx.subject.findUnique({
+        where: { code: trimmedSubjectCode }
+      });
+      
+      // ถ้าพบในฐานข้อมูล ให้ใช้ชื่อวิชาจากฐานข้อมูล
+      if (existingSubject && existingSubject.name) {
+        subjectName = existingSubject.name;
+        console.log(`Retrieved subject name from database: ${subjectName} for code: ${trimmedSubjectCode}`);
+      } else {
+        // ถ้าไม่มีในฐานข้อมูล ให้ใช้ค่าเริ่มต้น
+        subjectName = `รหัสวิชา ${trimmedSubjectCode}`;
+        console.log(`Using default subject name for code: ${trimmedSubjectCode}`);
+      }
+    }
+
+    // Get subject and department with the fixed name
     const { subject, department } = await upsertSubject(
       trimmedSubjectCode, 
-      subjectNameParts.join(' '),
+      subjectName,
       tx
     );
 
@@ -442,6 +481,16 @@ function validateExamData(data: ExamData): boolean {
   
   // Handle empty fields with default values
   data.วิชา = parseField(data.วิชา, 'ไม่ระบุรหัสวิชา');
+
+  // ตรวจสอบว่าข้อมูลวิชามีรูปแบบถูกต้องหรือไม่ (ควรมีรหัสวิชาอย่างน้อย)
+  if (data.วิชา !== 'ไม่ระบุรหัสวิชา') {
+    const subjectParts = data.วิชา.trim().split(' ');
+    if (subjectParts.length === 0 || !subjectParts[0]) {
+      data.วิชา = 'ไม่ระบุรหัสวิชา';
+      console.warn(`Invalid subject format detected, defaulting to: ${data.วิชา}`);
+    }
+  }
+  
   data.กลุ่ม = parseField(data.กลุ่ม, 'ไม่ระบุกลุ่ม');
   data['ชั้นปี'] = parseField(data['ชั้นปี'], 'ทุกชั้นปี');
   data['นศ.'] = parseNumber(data['นศ.'], 0).toString();
