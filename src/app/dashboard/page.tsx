@@ -23,17 +23,30 @@ interface Schedule {
     subject: {
       code: string;
       name: string;
+      department?: {
+        name: string;
+      };
     };
     professor: {
       id: string;
       name: string;
     };
+    additionalProfessors?: Array<{
+      professor: {
+        id: string;
+        name: string;
+      };
+    }>;
   };
   priority: boolean;
   isGenEd: boolean;
   quotaFilled: boolean;
   departmentQuota: number;
   invigilatorId?: string;
+  _debug?: {
+    isPriorityForUser?: boolean;
+    [key: string]: unknown;
+  };
 }
 
 export default function DashboardPage() {
@@ -393,7 +406,7 @@ export default function DashboardPage() {
                       </p>
                       {/* เพิ่มการแสดงชื่อภาควิชา */}
                       <p className="text-xs md:text-sm text-gray-600">
-                        ภาควิชา: {schedule.subjectGroup.subject.department.name || 'ไม่ระบุ'}
+                        ภาควิชา: {schedule.subjectGroup.subject.department?.name || 'ไม่ระบุ'}
                         {schedule._debug?.isPriorityForUser && ' (ภาควิชาของคุณ)'}
                       </p>
                       
