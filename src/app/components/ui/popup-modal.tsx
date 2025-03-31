@@ -15,6 +15,7 @@ interface PopupModalProps {
   isProcessing?: boolean;
   maxWidth?: string;
   confirmIcon?: React.ReactNode; // Add this prop
+  closeDisabled?: boolean;
 }
 
 interface PopupModalProps {

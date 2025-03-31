@@ -3,27 +3,74 @@ import prisma from '@/app/lib/prisma';
 
 export async function GET() {
   try {
+    // ใช้ select แทน include เพื่อเลือกเฉพาะฟิลด์ที่จำเป็น
     const schedules = await prisma.schedule.findMany({
-      include: {
+      select: {
+        id: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        scheduleDateOption: true,
+        examType: true,
+        academicYear: true,
+        semester: true,
+        notes: true,
+        room: {
+          select: {
+            id: true,
+            building: true,
+            roomNumber: true,
+          }
+        },
         subjectGroup: {
-          include: {
-            professor: true,
+          select: {
+            id: true,
+            groupNumber: true,
+            year: true,
+            studentCount: true,
             subject: {
-              include: {
-                department: true
+              select: {
+                code: true,
+                name: true,
+                department: {
+                  select: {
+                    name: true
+                  }
+                }
+              }
+            },
+            professor: {
+              select: {
+                id: true,
+                name: true
+              }
+            },
+            additionalProfessors: {
+              select: {
+                professor: {
+                  select: {
+                    id: true,
+                    name: true
+                  }
+                }
               }
             }
           }
         },
-        room: true,
-        invigilator: true
+        invigilator: {
+          select: {
+            id: true,
+            name: true,
+            type: true
+          }
+        }
       },
       where: {
         // เพิ่มเงื่อนไขถ้าต้องการ
       },
       orderBy: [
         { date: 'asc' },
-        { scheduleDateOption: 'asc' } // เพิ่มการเรียงลำดับตามช่วงเวลา
+        { scheduleDateOption: 'asc' }
       ]
     });
     
@@ -34,6 +81,7 @@ export async function GET() {
   }
 }
 
+// ส่วน POST function ยังคงเหมือนเดิม...
 export async function POST(request: Request) {
   try {
     const body = await request.json();

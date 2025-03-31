@@ -61,34 +61,38 @@ async function getDepartmentNameFromCode(
       '05': 'วิศวกรรมเครื่องกล',
       '06': 'วิศวกรรมการวัดคุม',
       '07': 'วิศวกรรมคอมพิวเตอร์',
-      '08': 'วิศวกรรมระบบควบคุม',
+      '08': 'วิศวกรรมการวัดคุม',
       '09': 'วิศวกรรมโยธา',
       '10': 'วิศวกรรมเกษตร',
       '11': 'วิศวกรรมอาหาร',
       '12': 'วิศวกรรมเคมี',
-      '13': 'วิศวกรรมคนตรีและสื่อประสม',
-      '14': 'วิศวกรรมพลังงานไฟฟ้า',
+      '13': 'วิศวกรรมคอมพิวเตอร์',
+      '14': 'วิศวกรรมไฟฟ้า',
       '20': 'วิศวกรรมปิโตรเคมี',
       '21': 'วิศวกรรมอุตสาหการ',
-      '23': 'วิศวกรรมระบบไอโอทีและสารสนเทศ',
-      '24': 'วิศวกรรมแมคคาทรอนิกส์',
-      '25': 'วิศวกรรมอัตโนมัติ',
-      '26': 'วิศวกรรมนวัตกรรมคอมพิวเตอร์',
-      '28': 'วิศวกรรมซอฟต์แวร์',
-      '30': 'วิศวกรรมไฟฟ้า(นานาชาติ)',
-      '32': 'วิศวกรรมโยธา(นานาชาติ)',
-      '34': 'วิศวกรรมไฟฟ้าสื่อสารและอิเล็กทรอนิกส์',
-      '35': 'วิศวกรรมอุตสาหการ(นานาชาติ)',
-      '36': 'วิศวกรรมเคมี(นานาชาติ)',
-      '37': 'วิศวกรรมโยธา(ต่อเนื่อง)',
-      '38': 'วิศวกรรมเกษตร(ต่อเนื่อง)',
-      '40': 'วิศวกรรมอวกาศและภูมิสารสนเทศ',
+      '22': 'วิศวกรรมเคมี',
+      '23': 'วิศวกรรมคอมพิวเตอร์',
+      '24': 'วิศวกรรมการวัดคุม',
+      '25': 'วิศวกรรมการวัดคุม',
+      '26': 'วิศวกรรมคอมพิวเตอร์',
+      '27': 'วิศวกรรมคอมพิวเตอร์',
+      '28': 'วิศวกรรมคอมพิวเตอร์',
+      '30': 'วิศวกรรมไฟฟ้า',
+      '33': 'วิศวกรรมชีวการแพทย์',
+      '32': 'วิศวกรรมโยธา',
+      '34': 'วิศวกรรมโทรคมนาคม',
+      '35': 'วิศวกรรมอุตสาหการ',
+      '36': 'วิศวกรรมเคมี',
+      '37': 'วิศวกรรมโยธา',
+      '38': 'วิศวกรรมเกษตร',
+      '40': 'วิศวกรรมเกษตร',
       '41': 'วิศวกรรมหุ่นยนต์และปัญญาประดิษฐ์',
-      '45': 'วิศวกรรมไฟฟ้า(ต่อเนื่อง)',
-      '51': 'วิศวกรรมพลังงาน',
-      '52': 'วิศวกรรมการเงิน',
-      '53': 'วิศวกรรมและการเป็นผู้ประกอบการ',
-      '92': 'วิศวกรรม-ชีวการแพทย์',
+      '42': 'วิศวกรรมเครื่องกล',
+      '45': 'วิศวกรรมไฟฟ้า',
+      '51': 'วิศวกรรมไฟฟ้า',
+      '52': 'วิศวกรรมคอมพิวเตอร์',
+      '53': 'วิศวกรรมโยธา',
+      '92': 'วิศวกรรมการวัดคุม',
       '99': 'ไม่มีภาควิชา'
     };
 
@@ -175,18 +179,36 @@ async function upsertSubject(
   const genEdPrefixes = ['901', '902', '903', '904', '905', '906', '966'];
   const isGenEd = genEdPrefixes.some(prefix => code.startsWith(prefix));
 
+  // ค้นหาวิชาที่มีอยู่แล้วก่อน เพื่อรักษาชื่อเดิมถ้าชื่อใหม่เป็นค่าว่าง
+  const existingSubject = await tx.subject.findUnique({
+    where: { code }
+  });
+
+  // กำหนดชื่อที่จะใช้
+  let subjectName = name;
+  if (!subjectName && existingSubject?.name) {
+    // ถ้าชื่อใหม่ว่างแต่มีชื่อเดิมในฐานข้อมูล ให้ใช้ชื่อเดิม
+    subjectName = existingSubject.name;
+    console.log(`Keeping existing subject name: ${subjectName} for code: ${code}`);
+  } else if (!subjectName) {
+    // ถ้าไม่มีทั้งชื่อใหม่และชื่อเดิม ให้ใช้รหัสวิชาเป็นชื่อ
+    subjectName = `รหัสวิชา ${code}`;
+    console.log(`Using code as subject name for: ${code}`);
+  }
+
   const subject = await tx.subject.upsert({
     where: { code },
     create: {
       code,
-      name,
+      name: subjectName,
       departmentId: department.id,
-      isGenEd // เพิ่ม flag isGenEd
+      isGenEd
     },
     update: {
-      name,
+      // อัพเดทชื่อเฉพาะเมื่อมีการระบุชื่อใหม่ที่ไม่ใช่ค่าว่าง
+      ...(name ? { name: subjectName } : {}),
       departmentId: department.id,
-      isGenEd // อัพเดท flag isGenEd
+      isGenEd
     }
   });
 
@@ -219,16 +241,37 @@ async function processExamData(
     const roomKey = `${row.อาคาร}_${row.ห้อง}_${examDate}_${scheduleOption}`;
     
     // ดำเนินการปกติ
-    // Update the relevant part in processExamData
-const [subjectCode, ...subjectNameParts] = row.วิชา.split(' ');
-const trimmedSubjectCode = subjectCode === 'ไม่ระบุรหัสวิชา' 
-  ? 'UNKNOWN' 
-  : subjectCode.trim();
+    // แก้ไขส่วนการแยกรหัสวิชาและชื่อวิชา
+    const [subjectCode, ...subjectNameParts] = row.วิชา.split(' ');
+    const trimmedSubjectCode = subjectCode === 'ไม่ระบุรหัสวิชา' 
+      ? 'UNKNOWN' 
+      : subjectCode.trim();
 
-    // Get subject and department first
+    // ตรวจสอบและจัดการกับชื่อวิชาที่อาจเป็นค่าว่าง
+    let subjectName = subjectNameParts.join(' ').trim();
+
+    // ถ้าไม่มีชื่อวิชา ให้ตรวจสอบจากฐานข้อมูลก่อน
+    if (!subjectName) {
+      // ค้นหาวิชาจากรหัสวิชาในฐานข้อมูล
+      const existingSubject = await tx.subject.findUnique({
+        where: { code: trimmedSubjectCode }
+      });
+      
+      // ถ้าพบในฐานข้อมูล ให้ใช้ชื่อวิชาจากฐานข้อมูล
+      if (existingSubject && existingSubject.name) {
+        subjectName = existingSubject.name;
+        console.log(`Retrieved subject name from database: ${subjectName} for code: ${trimmedSubjectCode}`);
+      } else {
+        // ถ้าไม่มีในฐานข้อมูล ให้ใช้ค่าเริ่มต้น
+        subjectName = `รหัสวิชา ${trimmedSubjectCode}`;
+        console.log(`Using default subject name for code: ${trimmedSubjectCode}`);
+      }
+    }
+
+    // Get subject and department with the fixed name
     const { subject, department } = await upsertSubject(
       trimmedSubjectCode, 
-      subjectNameParts.join(' '),
+      subjectName,
       tx
     );
 
@@ -438,6 +481,16 @@ function validateExamData(data: ExamData): boolean {
   
   // Handle empty fields with default values
   data.วิชา = parseField(data.วิชา, 'ไม่ระบุรหัสวิชา');
+
+  // ตรวจสอบว่าข้อมูลวิชามีรูปแบบถูกต้องหรือไม่ (ควรมีรหัสวิชาอย่างน้อย)
+  if (data.วิชา !== 'ไม่ระบุรหัสวิชา') {
+    const subjectParts = data.วิชา.trim().split(' ');
+    if (subjectParts.length === 0 || !subjectParts[0]) {
+      data.วิชา = 'ไม่ระบุรหัสวิชา';
+      console.warn(`Invalid subject format detected, defaulting to: ${data.วิชา}`);
+    }
+  }
+  
   data.กลุ่ม = parseField(data.กลุ่ม, 'ไม่ระบุกลุ่ม');
   data['ชั้นปี'] = parseField(data['ชั้นปี'], 'ทุกชั้นปี');
   data['นศ.'] = parseNumber(data['นศ.'], 0).toString();

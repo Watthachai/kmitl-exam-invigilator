@@ -21,6 +21,10 @@ const adminNavItems = [
   { href: '/dashboard/admin/rooms', label: 'ห้องสอบ', icon: Book },
   { href: '/dashboard/admin/users', label: 'ผู้ใช้งาน', icon: Users },
   { href: '/dashboard/admin/settings', label: 'ตั้งค่า', icon: Settings },
+  { href: '/dashboard/admin/notifications', label: 'การแจ้งเตือน', icon: MessageCircle },
+  { href: '/dashboard/admin/email-list', label: 'อีเมลผู้คุมสอบ', icon: MessageCircle },
+  { href: '/dashboard/admin/email-logs', label: 'ประวัติการส่งอีเมล', icon: MessageCircle },
+  { href: '/dashboard/admin/quota-calculator', label: 'คำนวณโควต้า', icon: MessageCircle },
 ];
 
 const userNavItems = [

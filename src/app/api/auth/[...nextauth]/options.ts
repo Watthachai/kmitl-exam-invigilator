@@ -15,7 +15,11 @@ export const options: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
+      authorization: {
+        url: "https://accounts.google.com/o/oauth2/auth",
+        params: { prompt: "consent", access_type: "offline", response_type: "code" }
+      }
+    })
   ],
 
   // 3) NextAuth callbacks
@@ -31,8 +35,8 @@ export const options: NextAuthOptions = {
           await logActivity('LOGIN', `User ${user.email} signed in`);
           return true; // Allow sign-in
         }
-        // Otherwise, block sign-in
-        return false;
+        // ส่งต่อ error ที่ระบุว่าเป็น domain error
+        throw new Error('domain');
       }
       // For other providers, allow sign-in by default
       await logActivity('LOGIN', `User ${user.email} signed in`);
@@ -82,6 +86,8 @@ export const options: NextAuthOptions = {
       }
       return session;
     },
+
+    // Removed the invalid `error` callback as it is not supported by NextAuthOptions.
   },
 
   // 4) NextAuth events
@@ -128,4 +134,7 @@ export const options: NextAuthOptions = {
 
   // 5) Make sure you set a secret for NextAuth
   secret: process.env.NEXTAUTH_SECRET,
+
+  // เพิ่ม debug mode เพื่อดูรายละเอียดเพิ่มเติม
+  debug: process.env.NODE_ENV === "development",
 };

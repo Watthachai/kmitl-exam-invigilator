@@ -1,15 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { FiEdit2, FiTrash2, FiDownload, FiFilter, FiEye, FiShuffle, FiArrowLeft } from "react-icons/fi";
+import { useEffect, useState, useCallback } from "react";
+import { FiEdit2, FiDownload, FiFilter, FiEye, FiShuffle, FiArrowLeft } from "react-icons/fi";
 import toast, { Toaster } from "react-hot-toast";
 import PopupModal from "@/app/components/ui/popup-modal";
 import { Invigilator } from "@prisma/client";
-import Highlight from "@/app/components/ui/highlight";
-import { ImSpinner8 } from "react-icons/im";
-import { FiDatabase } from "react-icons/fi";
 import { utils as XLSXUtils, write } from "xlsx";
 import  SearchableInvigilatorSelect from "@/app/components/ui/search-dropdown";
+import debounce from 'lodash/debounce';
+
+interface AssignmentStats {
+  totalSchedules: number;
+  assignedSchedules: number;
+  unassignedSchedules: number;
+  facultyAssignments: number;
+  staffAssignments: number;
+  schedulesByDepartment?: { [key: string]: number };
+}
 
 interface SubjectGroup {
   id: string;
@@ -87,7 +94,7 @@ interface ExtendedInvigilator extends Invigilator {
 }
 
 interface AssignmentPreview {
-  id: string;
+  scheduleId: string;
   date: string | Date;
   timeSlot: string;
   subjectCode: string;
@@ -102,6 +109,11 @@ interface AssignmentPreview {
   quotaTotal: number;
   isTeachingFaculty: boolean;
   otherAssignments?: string;
+  timeConflicts?: Array<{
+    date: string;
+    timeSlot: string;
+    subjectCode: string;
+  }> | null;
 }
 
 type SortKey = keyof Schedule | "subjectGroup.subject.department.name";
@@ -172,6 +184,15 @@ export default function ExamsPage() {
     semester: "",
   });
 
+  const [assignmentStats, setAssignmentStats] = useState<AssignmentStats>({
+    totalSchedules: 0,
+    assignedSchedules: 0,
+    unassignedSchedules: 0,
+    facultyAssignments: 0,
+    staffAssignments: 0
+  });
+  const [showAssignmentStatsModal, setShowAssignmentStatsModal] = useState(false);
+
   const [isLoading, setIsLoading] = useState(true);
 
   const [sortConfig, setSortConfig] = useState<{
@@ -194,42 +215,73 @@ export default function ExamsPage() {
   const [previewData, setPreviewData] = useState<Schedule[]>([]);
   const [showPreview, setShowPreview] = useState(false);
 
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 20,
+    totalItems: 0,
+    totalPages: 0
+  });
+
   useEffect(() => {
     fetchSchedules();
   }, []);
 
-  const fetchSchedules = async () => {
+  const fetchSchedules = async (page: number = 1) => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/schedules");
-      const data = await response.json();
-
-      // เรียงลำดับข้อมูลก่อนเก็บใน state
-      const sortedData = data.sort((a: Schedule, b: Schedule) => {
-        const yearCompare = b.academicYear - a.academicYear;
-        if (yearCompare !== 0) return yearCompare;
-
-        const semesterCompare = b.semester - a.semester;
-        if (semesterCompare !== 0) return semesterCompare;
-
-        const dateCompare =
-          new Date(a.date).getTime() - new Date(b.date).getTime();
-        if (dateCompare !== 0) return dateCompare;
-
-        const timeSlotOrder = { ช่วงเช้า: 1, ช่วงบ่าย: 2 };
-        return (
-          timeSlotOrder[a.scheduleDateOption] -
-          timeSlotOrder[b.scheduleDateOption]
-        );
+      
+      // สร้าง URL params สำหรับ filter และ pagination
+      const params = new URLSearchParams({
+        page: page.toString(),
+        pageSize: pagination.pageSize.toString(),
+        ...(filters.examType && { examType: filters.examType }),
+        ...(filters.academicYear && { academicYear: filters.academicYear }),
+        ...(filters.semester && { semester: filters.semester }),
+        ...(filters.department && { department: filters.department }),
+        ...(filters.date && { date: filters.date }),
+        ...(filters.timeSlot && { timeSlot: filters.timeSlot }),
+        ...(filters.searchQuery && { searchQuery: filters.searchQuery })
       });
-
-      setSchedules(sortedData);
+      
+      const response = await fetch(`/api/schedules/paginate?${params}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch schedules');
+      }
+      
+      const data = await response.json();
+      
+      // ตั้งค่าข้อมูลโดยตรง ไม่ต้องกรองอีกรอบ
+      setSchedules(data.items);
+      setPagination({
+        page: data.page,
+        pageSize: data.pageSize,
+        totalItems: data.totalItems,
+        totalPages: data.totalPages
+      });
     } catch (error) {
       console.error("Failed to fetch exam schedules:", error);
       toast.error("ไม่สามารถโหลดข้อมูลตารางสอบได้");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // เพิ่ม useEffect เพื่อให้เรียก fetchSchedules เมื่อ filters เปลี่ยนแปลง
+  useEffect(() => {
+    // เรียกดึงข้อมูลทันทีเมื่อตัวกรองเปลี่ยนแปลง (ยกเว้น searchQuery ซึ่งจัดการโดย debounce แล้ว)
+    if (!filters.searchQuery) {
+      fetchSchedules(1);
+    }
+  }, [filters.date, filters.timeSlot, filters.department, filters.examType, filters.academicYear, filters.semester]);
+
+  // แก้ไขฟังก์ชัน handleFilterChange ให้สะดวกขึ้น
+  const handleFilterChange = (filterName: string, value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [filterName]: value
+    }));
+    // ไม่ต้องเรียก fetchSchedules ที่นี่เพราะจะถูกจัดการโดย useEffect ข้างบน
   };
 
   // 3. ปรับปรุง useEffect สำหรับการโหลดข้อมูลครั้งแรก
@@ -468,81 +520,71 @@ export default function ExamsPage() {
     }
   };
 
-  const generateExportPreview = () => {
-    // Apply export filters
-    const filtered = schedules.filter((schedule) => {
-      const matchesExamType =
-        !exportFilters.examType || schedule.examType === exportFilters.examType;
-
-      const matchesYear =
-        !exportFilters.academicYear ||
-        schedule.academicYear === parseInt(exportFilters.academicYear);
-
-      const matchesSemester =
-        !exportFilters.semester ||
-        schedule.semester === parseInt(exportFilters.semester);
-
-      const matchesDepartment =
-        !exportFilters.department ||
-        schedule.subjectGroup.subject.department.name ===
-          exportFilters.department;
-
-      // Add date range filtering
-      const scheduleDate = new Date(schedule.date);
-      const startDate = exportFilters.startDate
-        ? new Date(exportFilters.startDate)
-        : null;
-      const endDate = exportFilters.endDate
-        ? new Date(exportFilters.endDate)
-        : null;
-
-      const matchesDateRange =
-        (!startDate || scheduleDate >= startDate) &&
-        (!endDate || scheduleDate <= endDate);
-
-      return (
-        matchesExamType &&
-        matchesYear &&
-        matchesSemester &&
-        matchesDepartment &&
-        matchesDateRange
-      );
-    });
-
-    // Sort the filtered data
-    const sorted = [...filtered].sort((a, b) => {
-      // Sort by department
-      const deptCompare = a.subjectGroup.subject.department.name.localeCompare(
-        b.subjectGroup.subject.department.name
-      );
-      if (deptCompare !== 0) return deptCompare;
-
-      // Sort by subject code
-      const codeCompare = a.subjectGroup.subject.code.localeCompare(
-        b.subjectGroup.subject.code
-      );
-      if (codeCompare !== 0) return codeCompare;
-
-      // Sort by group
-      const groupCompare = a.subjectGroup.groupNumber.localeCompare(
-        b.subjectGroup.groupNumber
-      );
-      if (groupCompare !== 0) return groupCompare;
-
-      // Sort by date
-      return new Date(a.date).getTime() - new Date(b.date).getTime();
-    });
-
-    setPreviewData(sorted);
-    setShowPreview(true);
+  const generateExportPreview = async () => {
+    try {
+      // Apply export filters to build query parameters
+      const params = new URLSearchParams({
+        ...(exportFilters.examType && { examType: exportFilters.examType }),
+        ...(exportFilters.academicYear && { academicYear: exportFilters.academicYear }),
+        ...(exportFilters.semester && { semester: exportFilters.semester }),
+        ...(exportFilters.department && { department: exportFilters.department }),
+        ...(exportFilters.startDate && { startDate: exportFilters.startDate }),
+        ...(exportFilters.endDate && { endDate: exportFilters.endDate }),
+       
+        pageSize: "9999", // ใช้ค่าสูงเพื่อให้ได้ข้อมูลทั้งหมด
+        page: "1"
+      });
+      
+      setIsLoading(true);
+      const response = await fetch(`/api/schedules/paginate?${params}`);
+      
+      if (!response.ok) {
+        throw new Error("ไม่สามารถดึงข้อมูลสำหรับส่งออกได้");
+      }
+      
+      const data = await response.json();
+      
+      // Sort the filtered data
+      const sorted = [...data.items].sort((a, b) => {
+        // Sort by department
+        const deptCompare = a.subjectGroup.subject.department.name.localeCompare(
+          b.subjectGroup.subject.department.name
+        );
+        if (deptCompare !== 0) return deptCompare;
+  
+        // Sort by subject code
+        const codeCompare = a.subjectGroup.subject.code.localeCompare(
+          b.subjectGroup.subject.code
+        );
+        if (codeCompare !== 0) return codeCompare;
+  
+        // Sort by group
+        const groupCompare = a.subjectGroup.groupNumber.localeCompare(
+          b.subjectGroup.groupNumber
+        );
+        if (groupCompare !== 0) return groupCompare;
+  
+        // Sort by date
+        return new Date(a.date).getTime() - new Date(b.date).getTime();
+      });
+  
+      setPreviewData(sorted);
+      setShowPreview(true);
+      setIsLoading(false);
+      
+    } catch (error) {
+      console.error("Error generating export preview:", error);
+      toast.error("เกิดข้อผิดพลาดในการแสดงตัวอย่างข้อมูล");
+      setIsLoading(false);
+    }
   };
-
+  
   const handleExportExcel = () => {
     try {
       // สร้าง workbook และ worksheet
       const wb = XLSXUtils.book_new();
       const ws = XLSXUtils.aoa_to_sheet([]);
-
+  
       // กำหนดหัวเรื่องรายงาน
       const examTypeText = exportFilters.examType
         ? exportFilters.examType === "MIDTERM"
@@ -552,8 +594,8 @@ export default function ExamsPage() {
       const yearText = exportFilters.academicYear || "ทุกปี";
       const semesterText = exportFilters.semester || "ทุกภาค";
       const departmentText = exportFilters.department || "ทุกภาควิชา";
-
-      // เพิ่มหัวเรื่อง 2 บรรทัด และหัวตาราง
+  
+      // เพิ่มหัวเรื่อง 2 บรรทัด และหัวตาราง - ใช้เฉพาะคอลัมน์ที่ต้องการ
       XLSXUtils.sheet_add_aoa(
         ws,
         [
@@ -565,34 +607,29 @@ export default function ExamsPage() {
           [
             "วันที่",
             "เวลา",
-            "ลำดับ",
-            "วิชา",
-            "กลุ่ม",
+            "รหัสวิชา",
+            "ชื่อวิชา",
+            "กลุ่มเรียน",
             "ชั้นปี",
-            "นศ.",
+            "จำนวน นศ.",
             "ผู้สอน",
             "อาคาร",
             "ห้อง",
-            "จำนวน",
-            "คำนำหน้า",
-            "ชื่อ",
-            "นามสกุล",
+            "ความจุห้อง",
+            "ชื่อเจ้าหน้าที่",
             "หมายเหตุ",
           ],
         ],
         { origin: "A1" }
       );
-
+  
       // เตรียมข้อมูลสำหรับการส่งออก
       const exportRows = [];
-
+  
       for (const schedule of previewData) {
-        // หาชื่ออาจารย์จาก invigilator ที่เชื่อมกับ professor (ถ้ามี)
+        // หาชื่ออาจารย์จาก invigilator
         let invigilatorName = schedule.invigilator?.name || "-";
-        let firstName = "-";
-        let lastName = "-";
-        let prefix = "-";
-
+  
         // ค้นหา invigilator ในรายการ state เพื่อดึง displayName (ถ้ามี)
         if (schedule.invigilator) {
           const matchedInvigilator = invigilators.find(
@@ -600,53 +637,25 @@ export default function ExamsPage() {
           );
           if (matchedInvigilator?.displayName) {
             invigilatorName = matchedInvigilator.displayName;
-
-            // แยกคำนำหน้า ชื่อ นามสกุล
-            const nameParts = invigilatorName.split(" ");
-            if (nameParts.length >= 2) {
-              // ตรวจสอบคำนำหน้า
-              const possiblePrefixes = [
-                "นาย",
-                "นาง",
-                "นางสาว",
-                "ดร.",
-                "ผศ.",
-                "รศ.",
-                "ศ.",
-                "ผศ.ดร.",
-                "รศ.ดร.",
-                "ศ.ดร.",
-              ];
-              if (possiblePrefixes.some((p) => nameParts[0].includes(p))) {
-                prefix = nameParts[0];
-                firstName = nameParts[1] || "-";
-                lastName = nameParts.slice(2).join(" ") || "-";
-              } else {
-                prefix = "-";
-                firstName = nameParts[0] || "-";
-                lastName = nameParts.slice(1).join(" ") || "-";
-              }
-            } else {
-              firstName = invigilatorName;
-            }
           }
         }
-
+  
         // รวมรายชื่ออาจารย์ผู้สอน
         const allProfessors = getAllProfessors(schedule);
-
+  
         // จำนวนนักศึกษา/ความจุห้อง
         const capacity = `${schedule.subjectGroup.studentCount || "0"}/${
           schedule.room.capacity || "0"
         }`;
-
+  
         // แสดงข้อมูลในตารางแบบที่ต้องการ
         const isSystemGenerated = schedule.notes?.includes("เพิ่มแถวโดยระบบ");
         const notes = isSystemGenerated ? "เพิ่มแถว" : schedule.notes || "";
-
-        // รวมรหัสวิชาและชื่อวิชาเป็น field เดียว
-        const subject = `${schedule.subjectGroup.subject.code} ${schedule.subjectGroup.subject.name}`;
-
+  
+        // เพิ่มตำแหน่งและภาควิชา
+        const invigilatorType = schedule.invigilator?.type || "-";
+        const subjectDepartment = schedule.subjectGroup.subject.department.name || "-";
+  
         exportRows.push([
           formatThaiDate(new Date(schedule.date)),
           `${new Date(schedule.startTime).toLocaleTimeString("th-TH", {
@@ -656,8 +665,8 @@ export default function ExamsPage() {
             hour: "2-digit",
             minute: "2-digit",
           })}`,
-          "", // ลำดับ (อาจกำหนดตามต้องการ)
-          subject, // วิชา (รวมรหัสและชื่อวิชาเป็นฟิลด์เดียว)
+          schedule.subjectGroup.subject.code, // รหัสวิชา
+          schedule.subjectGroup.subject.name, // ชื่อวิชา
           schedule.subjectGroup.groupNumber, // กลุ่ม
           schedule.subjectGroup.year || "-", // ชั้นปี
           schedule.subjectGroup.studentCount || "-", // นศ.
@@ -665,50 +674,48 @@ export default function ExamsPage() {
           schedule.room.building, // อาคาร
           schedule.room.roomNumber, // ห้อง
           capacity, // จำนวน (นศ./ความจุห้อง)
-          prefix, // คำนำหน้า
-          firstName, // ชื่อ
-          lastName, // นามสกุล
+          subjectDepartment, // ภาควิชา
+          invigilatorType, // ตำแหน่งผู้คุมสอบ
+          invigilatorName, // ชื่อเจ้าหน้าที่ (ใช้ชื่อเต็ม)
           notes, // หมายเหตุ
         ]);
       }
-
+  
       // เพิ่มข้อมูลลงในชีท
       XLSXUtils.sheet_add_aoa(ws, exportRows, { origin: "A4" });
-
+  
       // ตั้งค่าความกว้างคอลัมน์
       const colWidths = [
         { wch: 15 }, // วันที่
         { wch: 18 }, // เวลา
-        { wch: 8 }, // ลำดับ
-        { wch: 30 }, // วิชา
+        { wch: 12 }, // รหัสวิชา
+        { wch: 20 }, // ชื่อวิชา
         { wch: 8 }, // กลุ่ม
         { wch: 8 }, // ชั้นปี
         { wch: 8 }, // นศ.
-        { wch: 25 }, // ผู้สอน
+        { wch: 15 }, // ผู้สอน
         { wch: 15 }, // อาคาร
         { wch: 10 }, // ห้อง
-        { wch: 10 }, // จำนวน
-        { wch: 10 }, // คำนำหน้า
-        { wch: 15 }, // ชื่อ
-        { wch: 20 }, // นามสกุล
-        { wch: 25 }, // หมายเหตุ
+        { wch: 15 }, // ตำแหน่งผู้คุมสอบ
+        { wch: 25 }, // ชื่อเจ้าหน้าที่
+        { wch: 15 }, // หมายเหตุ
       ];
       ws["!cols"] = colWidths;
-
+  
       // จัดรูปแบบหัวเรื่องและรวมเซลล์
       if (!ws["!merges"]) ws["!merges"] = [];
       ws["!merges"].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 14 } }); // รวมเซลล์บรรทัดแรก
       ws["!merges"].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 14 } }); // รวมเซลล์บรรทัดที่สอง
-
+  
       // เพิ่ม worksheet ไปยัง workbook
       XLSXUtils.book_append_sheet(wb, ws, "ตารางสอบ");
-
+  
       // สร้างชื่อไฟล์ที่มีข้อมูลตามฟิลเตอร์
       const fileName = `ตารางสอบ_${examTypeText}_${yearText}_${semesterText}_${departmentText.substring(
         0,
         10
       )}.xlsx`;
-
+  
       // ดาวน์โหลด
       const wbout = write(wb, {
         bookType: "xlsx",
@@ -716,7 +723,7 @@ export default function ExamsPage() {
         bookSST: false,
         compression: true,
       });
-
+  
       const blob = new Blob([wbout], { type: "application/octet-stream" });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -724,7 +731,7 @@ export default function ExamsPage() {
       a.download = fileName;
       a.click();
       window.URL.revokeObjectURL(url);
-
+  
       setShowExportModal(false);
       setShowPreview(false);
       toast.success("ส่งออกข้อมูลสำเร็จ");
@@ -733,6 +740,7 @@ export default function ExamsPage() {
       toast.error("เกิดข้อผิดพลาดในการส่งออกข้อมูล");
     }
   };
+
 
   // Update filter logic
   const filteredSchedules = schedules.filter((schedule) => {
@@ -839,83 +847,284 @@ export default function ExamsPage() {
     department: "",
     prioritizeQuota: true,
     excludeAlreadyAssigned: true,
-    respectTimeConstraints: true
+    respectTimeConstraints: true,
+    avoidSameTimeSlot: true, // เพิ่มตัวเลือกนี้
+    allowSameDayDifferentSlot: true // เพิ่มตัวเลือกนี้
   });
+
   const [previewAssignments, setPreviewAssignments] = useState<AssignmentPreview[]>([]);
 
   // ฟังก์ชันสำหรับสุ่มและจัดสรรผู้คุมสอบ
-const handleRandomAssign = async () => {
-  if (previewAssignments.length > 0) {
-    // ถ้ามีการ preview แล้ว ให้บันทึกการมอบหมาย
-    try {
-      // เริ่มแสดง loading
-      toast.loading("กำลังบันทึกข้อมูล...");
-      
-      // ส่งข้อมูลไปบันทึกที่ API
-      const response = await fetch("/api/schedules/bulk-assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assignments: previewAssignments }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "ไม่สามารถบันทึกข้อมูลได้");
+  // แก้ไขฟังก์ชัน handleRandomAssign ใน component ExamsPage
+  const handleRandomAssign = async () => {
+    if (previewAssignments.length > 0) {
+      // ถ้ามีการ preview แล้ว ให้บันทึกการมอบหมาย
+      try {
+        toast.loading("กำลังบันทึกข้อมูล...");
+        
+        // แก้ไขโครงสร้างข้อมูลให้ใช้ scheduleId แทน id
+        const formattedAssignments = previewAssignments.map(assignment => ({
+          scheduleId: assignment.scheduleId,
+          newInvigilatorId: assignment.newInvigilatorId
+        }));
+        
+        console.log('Sending assignments:', formattedAssignments);
+        
+        // ส่งข้อมูลไปบันทึกที่ API
+        const response = await fetch("/api/schedules/bulk-assign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assignments: formattedAssignments }),
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "ไม่สามารถบันทึกข้อมูลได้");
+        }
+        
+        toast.dismiss();
+        toast.success(`บันทึกข้อมูลสำเร็จ ${previewAssignments.length} รายการ`);
+        setShowRandomAssignModal(false);
+        setPreviewAssignments([]);
+        
+        await Promise.all([fetchSchedules(), fetchInvigilators()]);
+      } catch (error) {
+        toast.dismiss();
+        toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
       }
-      
-      // แสดง toast success และรีเฟรชข้อมูล
-      toast.dismiss();
-      toast.success(`บันทึกข้อมูลสำเร็จ ${previewAssignments.length} รายการ`);
-      setShowRandomAssignModal(false);
-      setPreviewAssignments([]);
-      
-      // รีเฟรชข้อมูลตาราง
-      await Promise.all([fetchSchedules(), fetchInvigilators()]);
-    } catch (error) {
-      toast.dismiss();
-      toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+    } else {
+      // ถ้ายังไม่มี preview ให้ดึงข้อมูลเพื่อแสดงตัวอย่าง
+      try {
+        toast.loading("กำลังประมวลผล...");
+        
+        console.log("Sending config to API:", randomAssignConfig);
+        
+        // ส่งเงื่อนไขการกรองไปยัง API รวมถึงตัวเลือกเพิ่มเติมใหม่
+        const response = await fetch("/api/schedules/random-assign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...randomAssignConfig,
+            // เพิ่มข้อมูลเกี่ยวกับตัวเลือกใหม่
+            timeConstraints: {
+              avoidSameTimeSlot: randomAssignConfig.avoidSameTimeSlot,
+              allowSameDayDifferentSlot: randomAssignConfig.allowSameDayDifferentSlot
+            }
+          }),
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "ไม่สามารถดึงข้อมูลได้");
+        }
+        
+        const data = await response.json();
+        console.log("Received data from API:", data);
+        
+        // ตรวจสอบว่าได้รับข้อมูลแบบที่คาดหวังหรือไม่
+        if (!data || !data.assignments) {
+          throw new Error("ข้อมูลที่ได้รับไม่ถูกต้อง: " + JSON.stringify(data));
+        }
+        
+        // ตรวจสอบว่าได้รับข้อมูล array หรือไม่
+        if (!Array.isArray(data.assignments)) {
+          console.warn("API ไม่ได้ส่งข้อมูลเป็น array:", data.assignments);
+          // สร้าง array เปล่าเพื่อป้องกันข้อผิดพลาด
+          data.assignments = [];
+        }
+        
+        if (data.assignments.length === 0) {
+          toast.dismiss();
+          
+          // ดึงข้อมูลสถิติการจัดสรร
+          const assignStats = data.statistics || {
+            totalSchedules: 0,
+            assignedSchedules: 0,
+            unassignedSchedules: 0,
+            facultyAssignments: 0,
+            staffAssignments: 0
+          };
+          
+          // แสดงกล่องข้อมูลแทนที่จะแค่แสดง toast
+          setPreviewAssignments([]); // ให้แน่ใจว่า preview ว่างเปล่า
+          
+          // เก็บข้อมูลสถิติลงใน state ชั่วคราวเพื่อแสดงผล
+          setAssignmentStats(assignStats);
+          setShowAssignmentStatsModal(true);
+          return;
+        }
+        
+        // ตรวจสอบความขัดแย้งก่อนแสดงผล
+        const assignmentsByInvigilator = new Map();
+        const timeSlotConflicts = [];
+  
+        // จัดกลุ่มตามผู้คุมสอบ
+        data.assignments.forEach((assignment: AssignmentPreview) => {
+          if (!assignmentsByInvigilator.has(assignment.newInvigilatorId)) {
+            assignmentsByInvigilator.set(assignment.newInvigilatorId, [] as AssignmentPreview[]);
+          }
+          assignmentsByInvigilator.get(assignment.newInvigilatorId)?.push(assignment);
+        });
+  
+        // ตรวจสอบความขัดแย้งในแต่ละกลุ่ม
+        assignmentsByInvigilator.forEach((assignments) => {
+          // จัดเรียงตามวันและเวลา
+            assignments.sort((a: AssignmentPreview, b: AssignmentPreview): number => {
+            const dateA: Date = new Date(a.date);
+            const dateB: Date = new Date(b.date);
+            if (dateA.getTime() !== dateB.getTime()) {
+              return dateA.getTime() - dateB.getTime();
+            }
+            // ถ้าวันเดียวกัน เรียงตาม timeSlot
+            return a.timeSlot.localeCompare(b.timeSlot);
+            });
+          
+          // ตรวจสอบความขัดแย้ง
+          for (let i = 0; i < assignments.length; i++) {
+            const current = assignments[i];
+            
+            // เตรียมตรวจสอบความขัดแย้ง
+            const currentDate = new Date(current.date).toDateString();
+            const currentTime = current.timeSlot;
+            
+            // ตรวจสอบกับรายการอื่นๆ
+            for (let j = i + 1; j < assignments.length; j++) {
+              const other = assignments[j];
+              const otherDate = new Date(other.date).toDateString();
+              const otherTime = other.timeSlot;
+              
+              // ถ้าวันเดียวกันและเวลาเดียวกัน = ขัดแย้ง
+              if (currentDate === otherDate && currentTime === otherTime) {
+                console.log(`ความขัดแย้ง: ${current.newInvigilator} ได้รับมอบหมายให้คุมสอบซ้ำซ้อนในวันและเวลาเดียวกัน`);
+                
+                // เพิ่มข้อมูลความขัดแย้ง
+                if (!current.timeConflicts) current.timeConflicts = [];
+                if (!other.timeConflicts) other.timeConflicts = [];
+                
+                current.timeConflicts.push({
+                  date: formatThaiDate(new Date(other.date)),
+                  timeSlot: other.timeSlot,
+                  subjectCode: other.subjectCode
+                });
+                
+                other.timeConflicts.push({
+                  date: formatThaiDate(new Date(current.date)),
+                  timeSlot: current.timeSlot,
+                  subjectCode: current.subjectCode
+                });
+                
+                timeSlotConflicts.push({current, other});
+              }
+            }
+          }
+        });
+  
+        // แจ้งเตือนถ้าพบความขัดแย้ง
+        if (timeSlotConflicts.length > 0) {
+          toast(`พบความขัดแย้งของเวลาคุมสอบ ${timeSlotConflicts.length} คู่ กรุณาตรวจสอบและแก้ไข`, {
+            duration: 5000,
+            icon: '⚠️',
+            style: {
+              background: '#fef3c7',
+              color: '#92400e',
+            },
+          });
+        }
+  
+        // กำหนดข้อมูลที่มีการตรวจสอบแล้วให้กับ state
+        setPreviewAssignments(data.assignments);
+        console.log("Set preview assignments, new length:", data.assignments.length);
+        toast.dismiss();
+        toast.success(`พบข้อมูลทั้งหมด ${data.assignments.length} รายการ`);
+      } catch (error) {
+        console.error("Error fetching assignments:", error);
+        toast.dismiss();
+        toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาดในการดึงข้อมูล");
+      }
     }
-  } else {
-    // ถ้ายังไม่มี preview ให้ดึงข้อมูลเพื่อแสดงตัวอย่าง
-    try {
-      toast.loading("กำลังประมวลผล...");
+  };
+
+  // แก้ไขฟังก์ชัน handleChangeAssignedInvigilator 
+  const handleChangeAssignedInvigilator = (index: number) => {
+    setCurrentEditIndex(index);
+    setSelectedInvForEdit(null); // รีเซ็ตค่าเลือกผู้คุมสอบก่อนแสดง Modal
+    setShowEditInvigilatorModal(true);
+  };
+
+  const debouncedSearch = useCallback(
+    debounce((value: string) => {
+      setFilters(prev => ({ ...prev, searchQuery: value }));
+      fetchSchedules(1); // Reset to page 1 when searching
+    }, 300),
+    [setFilters, fetchSchedules]
+  );
+
+  // อัพเดทฟังก์ชัน handleChangeAssignedInvigilator ให้ตรวจสอบความขัดแย้งเมื่อมีการเปลี่ยนแปลง
+const handleEditConfirm = () => {
+  if (!selectedInvForEdit || currentEditIndex === null) return;
+  
+  // ตรวจสอบความขัดแย้งด้านเวลา
+  const currentAssignment = previewAssignments[currentEditIndex];
+  const sameInvigilatorAssignments = previewAssignments.filter(
+    (a, idx) => 
+      idx !== currentEditIndex && 
+      a.newInvigilatorId === selectedInvForEdit.id
+  );
+  
+  // ตรวจสอบว่ามีความขัดแย้งด้านเวลาหรือไม่
+  const timeConflicts = sameInvigilatorAssignments
+    .filter(a => {
+      const sameDate = new Date(a.date).toDateString() === new Date(currentAssignment.date).toDateString();
+      const sameTimeSlot = a.timeSlot === currentAssignment.timeSlot;
       
-      // ส่งเงื่อนไขการกรองไปยัง API
-      const response = await fetch("/api/schedules/random-assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(randomAssignConfig),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "ไม่สามารถดึงข้อมูลได้");
-      }
-      
-      const data = await response.json();
-      
-      // ตั้งค่าข้อมูลสำหรับ preview
-      setPreviewAssignments(data.assignments);
-      toast.dismiss();
-    } catch (error) {
-      toast.dismiss();
-      toast.error(error instanceof Error ? error.message : "เกิดข้อผิดพลาดในการดึงข้อมูล");
+      // ถ้าเป็นวันเดียวกันและช่วงเวลาเดียวกัน = มีความขัดแย้ง
+      return sameDate && sameTimeSlot;
+    })
+    .map(a => ({
+      date: formatThaiDate(new Date(a.date)),
+      timeSlot: a.timeSlot,
+      subjectCode: `${a.subjectCode} - ${a.subjectName}`
+    }));
+  
+  // ถ้ามีความขัดแย้งและผู้ใช้ต้องการหลีกเลี่ยงความขัดแย้ง ให้แสดง warning
+  if (timeConflicts.length > 0 && randomAssignConfig.avoidSameTimeSlot) {
+    // แสดง confirm dialog
+    if (!window.confirm(
+      `พบความขัดแย้งด้านเวลา: อาจารย์ ${selectedInvForEdit.name} มีตารางคุมสอบซ้ำซ้อนในช่วงเวลาเดียวกัน ${timeConflicts.length} รายการ \n\nต้องการดำเนินการต่อหรือไม่?`
+    )) {
+      return; // ยกเลิกการแก้ไข
     }
   }
-};
-
-// แก้ไขฟังก์ชัน handleChangeAssignedInvigilator 
-const handleChangeAssignedInvigilator = (index: number) => {
-  setCurrentEditIndex(index);
-  setSelectedInvForEdit(null); // รีเซ็ตค่าเลือกผู้คุมสอบก่อนแสดง Modal
-  setShowEditInvigilatorModal(true);
-};
-
-// แก้ไขฟังก์ชัน handleQuickAssignInvigilator
-const handleQuickAssignInvigilator = (scheduleId: string) => {
-  setCurrentScheduleId(scheduleId);
-  setSelectedInvForQuickAssign(null); // รีเซ็ตค่าเลือกผู้คุมสอบก่อนแสดง Modal
-  setShowQuickAssignModal(true);
+  
+  // ถ้าผู้ใช้ยืนยันหรือไม่มีความขัดแย้ง ให้ดำเนินการต่อ
+  const updatedAssignments = [...previewAssignments];
+  updatedAssignments[currentEditIndex] = {
+    ...updatedAssignments[currentEditIndex],
+    newInvigilatorId: selectedInvForEdit.id,
+    newInvigilator: selectedInvForEdit.displayName || selectedInvForEdit.name || '',
+    invigilatorType: selectedInvForEdit.type || '',
+    invigilatorDepartment: selectedInvForEdit.department?.name || "-",
+    quotaUsed: selectedInvForEdit.assignedQuota || 0,
+    quotaTotal: selectedInvForEdit.quota || 0,
+    isTeachingFaculty: false,
+    timeConflicts: timeConflicts.length > 0 ? timeConflicts : null
+  };
+  
+  setPreviewAssignments(updatedAssignments);
+  setShowEditInvigilatorModal(false);
+  toast.success("อัพเดทผู้คุมสอบเรียบร้อย");
+  
+  // ถ้ามีความขัดแย้งให้แสดง warning
+  if (timeConflicts.length > 0) {
+    toast(`พบความขัดแย้งด้านเวลา ${timeConflicts.length} รายการ กรุณาตรวจสอบ`, {
+      duration: 5000,
+      icon: '⚠️',
+      style: {
+        background: '#fef3c7',
+        color: '#92400e',
+      },
+    });
+  }
 };
 
   return (
@@ -967,7 +1176,7 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
               <select
                 value={filters.academicYear}
                 onChange={(e) =>
-                  setFilters({ ...filters, academicYear: e.target.value })
+                  handleFilterChange("academicYear", e.target.value)
                 }
                 className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
               >
@@ -991,7 +1200,7 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
               <select
                 value={filters.examType}
                 onChange={(e) =>
-                  setFilters({ ...filters, examType: e.target.value })
+                  handleFilterChange("examType", e.target.value)
                 }
                 className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
               >
@@ -1009,7 +1218,7 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
               <select
                 value={filters.semester}
                 onChange={(e) =>
-                  setFilters({ ...filters, semester: e.target.value })
+                  handleFilterChange("semester", e.target.value)
                 }
                 className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
               >
@@ -1027,7 +1236,7 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
               <select
                 value={filters.department}
                 onChange={(e) =>
-                  setFilters({ ...filters, department: e.target.value })
+                  handleFilterChange("department", e.target.value)
                 }
                 className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
               >
@@ -1052,7 +1261,7 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
                 type="date"
                 value={filters.date}
                 onChange={(e) =>
-                  setFilters({ ...filters, date: e.target.value })
+                  handleFilterChange("date", e.target.value)
                 }
                 className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
               />
@@ -1066,7 +1275,7 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
               <select
                 value={filters.timeSlot}
                 onChange={(e) =>
-                  setFilters({ ...filters, timeSlot: e.target.value })
+                  handleFilterChange("timeSlot", e.target.value)
                 }
                 className="w-full px-3 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all appearance-none bg-white text-sm"
               >
@@ -1084,11 +1293,8 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
               <div className="relative">
                 <input
                   type="text"
-                  value={filters.searchQuery}
-                  onChange={(e) =>
-                    setFilters({ ...filters, searchQuery: e.target.value })
-                  }
-                  placeholder="ค้นหารหัสวิชา, ชื่อวิชา, ห้อง..."
+                  onChange={(e) => debouncedSearch(e.target.value)}
+                  placeholder="ค้นหารหัสวิชา, ชื่อวิชา, ห้อง, ชื่อผู้สอน..."
                   className="w-full px-8 py-1.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
                 />
                 <svg
@@ -1149,207 +1355,260 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
 
       {/* Table Container */}
       <div className="bg-white/30 backdrop-blur-xl rounded-xl shadow-lg border border-gray-100">
-        <div className="h-[calc(100vh-24rem)] overflow-auto">
-          {isLoading ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3">
-                <ImSpinner8 className="w-8 h-8 text-blue-500 animate-spin" />
-                <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
-              </div>
-            </div>
-          ) : sortedSchedules.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3">
-                <FiDatabase className="w-16 h-16 text-gray-300" />
-                <p className="text-gray-500 text-lg">ไม่พบข้อมูลตารางสอบ</p>
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm"
-                >
-                  เพิ่มตารางสอบ
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead className="bg-white/95 backdrop-blur-sm">
-                  <tr className="border-b border-gray-100">
-                    <th
-                      onClick={() =>
-                        setSortConfig({
-                          key: "date",
-                          direction:
-                            sortConfig.direction === "asc" ? "desc" : "asc",
-                        })
-                      }
-                      className="px-6 py-4 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-50"
-                    >
-                      วันที่{" "}
-                      {sortConfig.key === "date" && (
-                        <span>
-                          {sortConfig.direction === "asc" ? "↑" : "↓"}
-                        </span>
-                      )}
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      เวลา
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      วิชา
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      กลุ่มเรียน
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      ชั้นปี
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      จำนวน นศ.
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      ผู้สอน
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      อาคาร
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      ห้อง
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      จำนวน
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      ภาควิชา
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      ตำแหน่งผู้คุมสอบ
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      ชื่อเจ้าหน้าที่
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
-                      หมายเหตุ
-                    </th>
-                    <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                {/* Update table body rendering with null checks */}
-                <tbody className="divide-y divide-gray-100">
-                  {sortedSchedules.map((schedule) => (
-                    <tr key={schedule.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        {formatThaiDate(new Date(schedule.date))}
-                      </td>
-                      <td className="px-6 py-4">
-                        {new Date(schedule.startTime).toLocaleTimeString(
-                          "th-TH",
-                          {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }
-                        )}{" "}
-                        -{" "}
-                        {new Date(schedule.endTime).toLocaleTimeString(
-                          "th-TH",
-                          {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <Highlight
-                          text={`${schedule.subjectGroup.subject.code} - ${schedule.subjectGroup.subject.name}`}
-                          search={filters.searchQuery}
-                        />
-                      </td>
-                      <td className="px-6 py-4">
-                        {schedule.subjectGroup.groupNumber}
-                      </td>
-                      <td className="px-6 py-4">
-                        {schedule.subjectGroup.year || "-"}
-                      </td>
-                      <td className="px-6 py-4">
-                        {schedule.subjectGroup.studentCount || "-"}
-                      </td>
-                      <td className="px-6 py-4">
-                        {getAllProfessors(schedule)}
-                      </td>
-                      <td className="px-6 py-4">{schedule.room.building}</td>
-                      <td className="px-6 py-4">{schedule.room.roomNumber}</td>
-                      <td className="px-6 py-4">
-                        {`${schedule.subjectGroup.studentCount || "0"}/${
-                          schedule.room.capacity || "0"
-                        }`}
-                      </td>
-                      <td className="px-6 py-4">
-                        {schedule.subjectGroup.subject.department.name || "-"}
-                      </td>
-                      {/* Update invigilator columns with null checks */}
-                      <td className="px-6 py-4">
-                        {schedule.invigilator?.type || "-"}
-                      </td>
-                      <td className="px-6 py-4">
-                        {/* Show professor name if available, otherwise show invigilator name */}
-                        {(() => {
-                          // If schedule has invigilator
-                          if (schedule.invigilator) {
-                            // Find matching invigilator in state
-                            const matchedInvigilator = invigilators.find(
-                              (inv) => inv.id === schedule.invigilator?.id
-                            );
-
-                            // If matched and has displayName (from professor), use that
-                            if (matchedInvigilator?.displayName) {
-                              return matchedInvigilator.displayName;
-                            }
-
-                            // Otherwise use the name we have
-                            return schedule.invigilator.name || "-";
-                          }
-                          return "-";
-                        })()}
-                      </td>
-                      <td className="px-6 py-4">{schedule.notes || "-"}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => {
-                              setEditSchedule(schedule);
-                              setShowEditModal(true);
-                            }}
-                            className="flex items-center gap-1 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                          >
-                            <FiEdit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedSchedule(schedule);
-                              setShowDeleteModal(true);
-                            }}
-                            className="flex items-center gap-1 px-3 py-1 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                          >
-                            <FiTrash2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleQuickAssignInvigilator(schedule.id)}
-                            className="flex items-center gap-1 px-3 py-1 text-green-600 hover:bg-green-50 rounded-md transition-colors"
-                          >
-                            <FiEdit2 className="w-4 h-4" />
-                          </button>
-                        </div>
+        <div className="overflow-hidden h-[calc(100vh-24rem)]">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 z-10 bg-white/95">
+                <tr className="border-b border-gray-100">
+                  <th onClick={() => setSortConfig({
+                      key: "date", 
+                      direction: sortConfig.direction === "asc" ? "desc" : "asc",
+                    })} 
+                    className="px-6 py-4 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-50"
+                  >
+                    วันที่
+                    {sortConfig.key === "date" && (
+                      <span>
+                        {sortConfig.direction === "asc" ? "↑" : "↓"}
+                      </span>
+                    )}
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    เวลา
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    วิชา
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    กลุ่มเรียน
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    ชั้นปี
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    จำนวน นศ.
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    ผู้สอน
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    อาคาร
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    ห้อง
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    จำนวน
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    ภาควิชา
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    ตำแหน่งผู้คุมสอบ
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    ชื่อเจ้าหน้าที่
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    หมายเหตุ
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">
+                    ตรวจสอบ
+                  </th> {/* เพิ่มคอลัมน์นี้ */}
+                  <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              
+              {isLoading ? (
+                <tbody>
+                  {[...Array(8)].map((_, i) => (
+                    <tr key={i} className="animate-pulse border-b border-gray-100">
+                      <td colSpan={15} className="px-6 py-4">
+                        <div className="h-10 bg-gray-200 rounded-md"></div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
-          )}
+              ) : (
+                <tbody>
+                  {schedules.length === 0 ? (
+                    <tr>
+                      <td colSpan={15} className="px-6 py-8 text-center text-gray-500">
+                        ไม่พบข้อมูลที่ตรงตามเงื่อนไขการค้นหา
+                      </td>
+                    </tr>
+                  ) : (
+                    sortedSchedules.map((schedule) => (
+                      <tr key={schedule.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {formatThaiDate(new Date(schedule.date))}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {`${new Date(schedule.startTime).toLocaleTimeString("th-TH", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })} - ${new Date(schedule.endTime).toLocaleTimeString("th-TH", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}`}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {`${schedule.subjectGroup.subject.code} - ${schedule.subjectGroup.subject.name}`}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {schedule.subjectGroup.groupNumber}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {schedule.subjectGroup.year || "-"}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {schedule.subjectGroup.studentCount || "-"} คน
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {getAllProfessors(schedule)}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {schedule.room.building}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {schedule.room.roomNumber}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {`${schedule.subjectGroup.studentCount || "0"}/${schedule.room.capacity || "0"}`}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {schedule.subjectGroup.subject.department.name}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {schedule.invigilator?.type || "-"}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {schedule.invigilator?.name || "-"}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap">
+                          {schedule.notes || "-"}
+                        </td>
+                        <td className="px-4 py-2">
+                          {/* คอลัมน์ตรวจสอบ */}
+                          {"timeConflicts" in schedule && schedule.timeConflicts ? (
+                            <div className="flex items-center text-red-600">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.742-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                              <span className="text-xs">ช่วงเวลาซ้ำซ้อน</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center text-green-600">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              <span className="text-xs">ไม่มีความขัดแย้ง</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                setCurrentScheduleId(schedule.id);
+                                setShowQuickAssignModal(true);
+                              }}
+                              className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
+                              title="เพิ่มผู้คุมสอบ"
+                            >
+                              <FiEdit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedSchedule(schedule);
+                                setEditSchedule(JSON.parse(JSON.stringify(schedule)));
+                                setShowEditModal(true);
+                              }}
+                              className="p-1.5 bg-gray-50 text-gray-600 rounded hover:bg-gray-100"
+                              title="แก้ไขตารางสอบ"
+                            >
+                              <FiEdit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedSchedule(schedule);
+                                setShowDeleteModal(true);
+                              }}
+                              className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100"
+                              title="ลบตารางสอบ"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              )}
+            </table>
+          </div>
         </div>
-      </div>
+        <div className="mt-4 flex justify-between items-center">
+          <div className="text-sm text-gray-600">
+            แสดงรายการที่ {(pagination.page - 1) * pagination.pageSize + 1} - {Math.min(pagination.page * pagination.pageSize, pagination.totalItems)} จากทั้งหมด {pagination.totalItems} รายการ
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => fetchSchedules(pagination.page - 1)}
+              disabled={pagination.page <= 1}
+              className={`px-3 py-1 rounded-md ${
+                pagination.page <= 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+              }`}
+            >
+              ก่อนหน้า
+            </button>
+            
+            {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+              const pageNum = pagination.page + i - 2;
+              if (pageNum > 0 && pageNum <= pagination.totalPages) {
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => fetchSchedules(pageNum)}
+                    className={`w-8 h-8 rounded-md ${
+                      pagination.page === pageNum ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              }
+              return null;
+            })}
+            
+            <button
+              onClick={() => fetchSchedules(pagination.page + 1)}
+              disabled={pagination.page >= pagination.totalPages}
+              className={`px-3 py-1 rounded-md ${
+                pagination.page >= pagination.totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+              }`}
+            >
+              ถัดไป
+            </button>
+          </div>
+        </div>
+      </div> 
 
       {/* Modals - Moved outside table container */}
       {(showAddModal || showEditModal || showDeleteModal) && (
@@ -1732,13 +1991,16 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
                   </div>
                 </div>
                 <div className="bg-yellow-50 p-4 rounded-lg mt-4">
-                  <h4 className="font-medium text-yellow-700">หลักการจัดสรรโควต้า</h4>
-                  <p className="text-sm text-yellow-600 mt-1">
-                    ระบบจะจัดสรรตารางคุมสอบโดยแบ่งจำนวนตารางสอบทั้งหมดให้แก่อาจารย์อย่างเท่าเทียมกัน 
-                    หากมีเศษของการจัดสรรคงเหลือ ระบบจะจัดสรรให้แก่บุคลากรทั่วไป
-                    โดยจำนวนตารางสอบต่ออาจารย์ = จำนวนตารางสอบทั้งหมด ÷ จำนวนอาจารย์ทั้งหมด (ปัดลง)
-                  </p>
-                </div>
+  <h4 className="font-medium text-yellow-700">หลักการจัดสรรโควต้า</h4>
+  <p className="text-sm text-yellow-600 mt-1">
+    ระบบจะจัดสรรตารางคุมสอบโดยแบ่งจำนวนตารางสอบทั้งหมดให้แก่อาจารย์อย่างเท่าเทียมกัน 
+    จำนวนวิชาต่ออาจารย์ = จำนวนวิชาทั้งหมด ÷ จำนวนอาจารย์ (ปัดลง)
+  </p>
+  <p className="text-sm text-yellow-600 mt-1">
+    หากมีเศษวิชาเหลือจากการจัดสรรให้อาจารย์ ระบบจะจัดสรรให้แก่บุคลากรทั่วไป 
+    ในกรณีที่มีวิชาเหลือมากกว่าจำนวนบุคลากร บางท่านอาจได้รับจำนวนวิชามากกว่าคนอื่น
+  </p>
+</div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1889,194 +2151,135 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
 
                 <div className="max-h-96 overflow-auto border border-gray-200 rounded-lg">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          วันที่
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          เวลา
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          วิชา
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          กลุ่มเรียน
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          ชั้นปี
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          จำนวน นศ.
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          ผู้สอน
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          อาคาร
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          ห้อง
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          ความจุห้อง
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          ภาควิชา
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          ตำแหน่งผู้คุมสอบ
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          ชื่อเจ้าหน้าที่
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          หมายเหตุ
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {previewData.length > 0 ? (
-                        previewData.map((schedule) => {
-                          // ค้นหาชื่อผู้คุมสอบจาก displayName ถ้ามี
-                          let invigilatorName =
-                            schedule.invigilator?.name || "-";
-                          let firstName = "-";
-                          let lastName = "-";
-                          let prefix = "-";
+<thead className="bg-gray-50 sticky top-0">
+  <tr>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      วันที่
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      เวลา
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      รหัสวิชา
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      ชื่อวิชา
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      กลุ่มเรียน
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      ชั้นปี
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      จำนวน นศ.
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      ผู้สอน
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      อาคาร
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      ห้อง
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      ตำแหน่งผู้คุมสอบ
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      ชื่อเจ้าหน้าที่
+    </th>
+    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+      หมายเหตุ
+    </th>
+  </tr>
+</thead>
+<tbody className="bg-white divide-y divide-gray-200">
+  {previewData.length > 0 ? (
+    previewData.map((schedule) => {
+      // ค้นหาชื่อผู้คุมสอบจาก displayName ถ้ามี
+      let invigilatorName = schedule.invigilator?.name || "-";
+      
+      if (schedule.invigilator) {
+        const matchedInvigilator = invigilators.find(
+          (inv) => inv.id === schedule.invigilator?.id
+        );
+        if (matchedInvigilator?.displayName) {
+          invigilatorName = matchedInvigilator.displayName;
+        }
+      }
 
-                          if (schedule.invigilator) {
-                            const matchedInvigilator = invigilators.find(
-                              (inv) => inv.id === schedule.invigilator?.id
-                            );
-                            if (matchedInvigilator?.displayName) {
-                              invigilatorName = matchedInvigilator.displayName;
+      // ใช้ฟังก์ชัน getAllProfessors สำหรับแสดงรายชื่ออาจารย์ผู้สอน
+      const allProfessors = getAllProfessors(schedule);
 
-                              // แยกคำนำหน้า ชื่อ นามสกุล
-                              const nameParts = invigilatorName.split(" ");
-                              if (nameParts.length >= 2) {
-                                // ตรวจสอบคำนำหน้า
-                                const possiblePrefixes = [
-                                  "นาย",
-                                  "นาง",
-                                  "นางสาว",
-                                  "ดร.",
-                                  "ผศ.",
-                                  "รศ.",
-                                  "ศ.",
-                                  "ผศ.ดร.",
-                                  "รศ.ดร.",
-                                  "ศ.ดร.",
-                                ];
-                                if (
-                                  possiblePrefixes.some((p) =>
-                                    nameParts[0].includes(p)
-                                  )
-                                ) {
-                                  prefix = nameParts[0];
-                                  firstName = nameParts[1] || "-";
-                                  lastName =
-                                    nameParts.slice(2).join(" ") || "-";
-                                } else {
-                                  prefix = "-";
-                                  firstName = nameParts[0] || "-";
-                                  lastName =
-                                    nameParts.slice(1).join(" ") || "-";
-                                }
-                              } else {
-                                firstName = invigilatorName;
-                              }
-                            }
-                          }
+      const isSystemGenerated = schedule.notes?.includes("เพิ่มแถวโดยระบบ");
+      const notes = isSystemGenerated ? "เพิ่มแถว" : schedule.notes || "-";
+      
 
-                          // ใช้ฟังก์ชัน getAllProfessors สำหรับแสดงรายชื่ออาจารย์ผู้สอน
-                          const allProfessors = getAllProfessors(schedule);
-
-                          // ข้อมูลอื่นๆ
-                          const capacity = `${
-                            schedule.subjectGroup.studentCount || "0"
-                          }/${schedule.room.capacity || "0"}`;
-                          const isSystemGenerated =
-                            schedule.notes?.includes("เพิ่มแถวโดยระบบ");
-                          const notes = isSystemGenerated
-                            ? "เพิ่มแถว"
-                            : schedule.notes || "-";
-                          const subject = `${schedule.subjectGroup.subject.code} ${schedule.subjectGroup.subject.name}`;
-
-                          return (
-                            <tr
-                              key={schedule.id}
-                              className={
-                                isSystemGenerated ? "bg-yellow-50" : ""
-                              }
-                            >
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {formatThaiDate(new Date(schedule.date))}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {`${new Date(
-                                  schedule.startTime
-                                ).toLocaleTimeString("th-TH", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })} - ${new Date(
-                                  schedule.endTime
-                                ).toLocaleTimeString("th-TH", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}`}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap"></td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {subject}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {schedule.subjectGroup.groupNumber}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {schedule.subjectGroup.year || "-"}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {schedule.subjectGroup.studentCount || "-"}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {allProfessors}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {schedule.room.building}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {schedule.room.roomNumber}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {capacity}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {prefix}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {firstName}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {lastName}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {notes}
-                              </td>
-                            </tr>
-                          );
-                        })
-                      ) : (
-                        <tr>
-                          <td
-                            colSpan={15}
-                            className="px-4 py-8 text-center text-gray-500"
-                          >
-                            ไม่พบข้อมูลที่ตรงตามเงื่อนไขที่เลือก
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
+      return (
+        <tr
+          key={schedule.id}
+          className={isSystemGenerated ? "bg-yellow-50" : ""}
+        >
+          <td className="px-4 py-2 whitespace-nowrap">
+            {formatThaiDate(new Date(schedule.date))}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {`${new Date(schedule.startTime).toLocaleTimeString("th-TH", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })} - ${new Date(schedule.endTime).toLocaleTimeString("th-TH", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}`}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {schedule.subjectGroup.subject.code}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {schedule.subjectGroup.subject.name}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {schedule.subjectGroup.groupNumber}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {schedule.subjectGroup.year || "-"}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {schedule.subjectGroup.studentCount || "-"}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {allProfessors}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {schedule.room.building}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {schedule.room.roomNumber}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {schedule.invigilator?.type || "-"}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {invigilatorName}
+          </td>
+          <td className="px-4 py-2 whitespace-nowrap">
+            {notes}
+          </td>
+        </tr>
+      );
+    })
+  ) : (
+    <tr>
+      <td
+        colSpan={15}
+        className="px-4 py-8 text-center text-gray-500"
+      >
+        ไม่พบข้อมูลที่ตรงตามเงื่อนไขที่เลือก
+      </td>
+    </tr>
+  )}
+</tbody>
                   </table>
                 </div>
 
@@ -2104,7 +2307,11 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
     {showRandomAssignModal && (
       <PopupModal
         title="สุ่มผู้คุมสอบอัตโนมัติ"
-        onClose={() => setShowRandomAssignModal(false)}
+        onClose={() => {
+          setShowRandomAssignModal(false);
+          // เพิ่มการล้างค่า previewAssignments เมื่อปิด modal
+          setPreviewAssignments([]);
+        }}
         onConfirm={handleRandomAssign}
         confirmText={previewAssignments.length ? "ยืนยันการมอบหมาย" : "แสดงตัวอย่างผลการจัดตาราง"}
         maxWidth="5xl"
@@ -2151,19 +2358,70 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
             </div>
             
             {/* ตัวเลือกเพิ่มเติม */}
-            <div className="mt-4">
-              <h3 className="font-medium mb-2">ตัวเลือกเพิ่มเติม</h3>
-              <div className="space-y-2">
-                <div className="flex items-center">
-                  <input 
-                    type="checkbox" 
-                    id="prioritizeQuota" 
-                    checked={randomAssignConfig.prioritizeQuota}
-                    onChange={e => setRandomAssignConfig({...randomAssignConfig, prioritizeQuota: e.target.checked})}
-                    className="mr-2"
-                  />
-                  <label htmlFor="prioritizeQuota" className="text-sm">จัดลำดับความสำคัญตามโควต้า (อาจารย์ที่มีโควต้าน้อยจะถูกมอบหมายก่อน)</label>
-                </div>
+<div className="mt-4">
+  <h3 className="font-medium mb-2">ตัวเลือกเพิ่มเติม</h3>
+  <div className="space-y-2 bg-gray-50 p-4 rounded-lg border border-gray-200">
+    {/* ตัวเลือกเดิม */}
+    <div className="flex items-center">
+      <input 
+        type="checkbox" 
+        id="prioritizeQuota" 
+        checked={randomAssignConfig.prioritizeQuota}
+        onChange={e => setRandomAssignConfig({...randomAssignConfig, prioritizeQuota: e.target.checked})}
+        className="mr-2"
+      />
+      <label htmlFor="prioritizeQuota" className="text-sm">จัดลำดับความสำคัญตามโควต้า (อาจารย์ที่มีโควต้าน้อยจะถูกมอบหมายก่อน)</label>
+    </div>
+    
+    <div className="flex items-center">
+      <input 
+        type="checkbox" 
+        id="excludeAlreadyAssigned" 
+        checked={randomAssignConfig.excludeAlreadyAssigned}
+        onChange={e => setRandomAssignConfig({...randomAssignConfig, excludeAlreadyAssigned: e.target.checked})}
+        className="mr-2"
+      />
+      <label htmlFor="excludeAlreadyAssigned" className="text-sm">ข้ามตารางสอบที่มีผู้คุมสอบแล้ว</label>
+    </div>
+    
+    {/* ตัวเลือกใหม่เกี่ยวกับช่วงเวลา */}
+    <div className="pt-2 border-t border-gray-200">
+      <h4 className="font-medium text-sm mb-2 text-blue-700">ข้อจำกัดด้านเวลา</h4>
+      
+      <div className="flex items-center mb-2">
+        <input 
+          type="checkbox" 
+          id="avoidSameTimeSlot" 
+          checked={randomAssignConfig.avoidSameTimeSlot}
+          onChange={e => setRandomAssignConfig({...randomAssignConfig, avoidSameTimeSlot: e.target.checked})}
+          className="mr-2"
+        />
+        <label htmlFor="avoidSameTimeSlot" className="text-sm font-medium">
+          ป้องกันการมอบหมายซ้ำในช่วงเวลาเดียวกัน
+          <span className="block text-xs text-gray-500 font-normal mt-0.5">
+            เช่น อาจารย์ท่านหนึ่งจะไม่ได้รับมอบหมายให้คุมสอบช่วงเช้าซ้ำกันหลายวิชา
+          </span>
+        </label>
+      </div>
+      
+      <div className="flex items-center">
+        <input 
+          type="checkbox" 
+          id="allowSameDayDifferentSlot" 
+          checked={randomAssignConfig.allowSameDayDifferentSlot}
+          onChange={e => setRandomAssignConfig({...randomAssignConfig, allowSameDayDifferentSlot: e.target.checked})}
+          className="mr-2"
+        />
+        <label htmlFor="allowSameDayDifferentSlot" className="text-sm font-medium">
+          อนุญาตให้คุมสอบหลายช่วงเวลาในวันเดียวกัน
+          <span className="block text-xs text-gray-500 font-normal mt-0.5">
+            เช่น อาจารย์สามารถได้รับมอบหมายให้คุมสอบทั้งช่วงเช้าและช่วงบ่ายในวันเดียวกัน
+          </span>
+        </label>
+      </div>
+    </div>
+  </div>
+</div>
                 
                 <div className="flex items-center">
                   <input 
@@ -2187,8 +2445,6 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
                   <label htmlFor="respectTimeConstraints" className="text-sm">คำนึงถึงข้อจำกัดด้านเวลา (หลีกเลี่ยงการมอบหมายในวันเดียวกัน)</label>
                 </div>
               </div>
-            </div>
-          </div>
         ) : (
           <div className="space-y-6">
             <div className="bg-green-50 p-4 rounded-lg text-green-700 text-sm mb-4">
@@ -2208,39 +2464,120 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
                   <p className="text-lg font-bold text-blue-600">
                     {previewAssignments.filter(a => a.invigilatorType === 'อาจารย์').length} รายการ
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    จำนวนอาจารย์: {invigilators.filter(i => i.type === 'อาจารย์').length} คน
+                  </p>
                 </div>
                 <div className="bg-white rounded-md p-2 border border-purple-100">
                   <p className="text-xs text-gray-500">จัดสรรให้บุคลากร</p>
                   <p className="text-lg font-bold text-purple-600">
-                    {previewAssignments.filter(a => a.invigilatorType === 'บุคลากรทั่วไป').length} รายการ
+                    {previewAssignments.filter(a => a.invigilatorType === 'บุคลากร').length} รายการ
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    จำนวนบุคลากร: {invigilators.filter(i => i.type === 'บุคลากร').length} คน
                   </p>
                 </div>
                 <div className="bg-white rounded-md p-2 border border-yellow-100">
-                  <p className="text-xs text-gray-500">เกณฑ์การจัดสรร</p>
-                  <p className="text-xs font-medium text-yellow-700">
-                    อาจารย์: {Math.floor(previewAssignments.length / invigilators.filter(i => i.type === 'อาจารย์').length || 1)} วิชา/คน
-                    <br/>
-                    เศษที่เหลือ: {previewAssignments.length % invigilators.filter(i => i.type === 'อาจารย์').length || 0} วิชา → บุคลากร
-                  </p>
-                </div>
+  <p className="text-xs text-gray-500">เกณฑ์การจัดสรร</p>
+  {(() => {
+    const facultyCount = invigilators.filter(i => i.type === 'อาจารย์').length;
+    const staffCount = invigilators.filter(i => i.type === 'บุคลากร').length;
+    
+    // จำนวนรายการทั้งหมด
+  
+    // ตัวเลขจากข้อมูลจริง
+    const facultyAssignments = previewAssignments.filter(a => a.invigilatorType === 'อาจารย์').length;
+    const staffAssignments = previewAssignments.filter(a => a.invigilatorType === 'บุคลากร').length;
+    
+    // คำนวณค่าเฉลี่ยจากข้อมูลจริง
+    const avgFacultyQuota = facultyCount > 0 ? Math.round(facultyAssignments / facultyCount * 10) / 10 : 0;
+    const avgStaffQuota = staffCount > 0 ? Math.round(staffAssignments / staffCount * 10) / 10 : 0;
+    
+    // คำนวณสถิติการกระจาย
+    const facultyQuotaDist: Record<number, number> = {};
+    const staffQuotaDist: Record<number, number> = {};
+    
+    // จัดกลุ่มผู้คุมสอบตาม ID
+    const assignmentsByInvigilator: { [key: string]: { count: number; type: string } } = {};
+    previewAssignments.forEach(a => {
+      if (!assignmentsByInvigilator[a.newInvigilatorId]) {
+        assignmentsByInvigilator[a.newInvigilatorId] = {
+          count: 0,
+          type: a.invigilatorType || ""
+        };
+      }
+      assignmentsByInvigilator[a.newInvigilatorId].count++;
+    });
+    
+    // นับจำนวนโควต้าในแต่ละกลุ่ม
+    Object.values(assignmentsByInvigilator).forEach(inv => {
+      const quota = inv.count;
+      const type = inv.type;
+      
+      if (type === 'อาจารย์') {
+        facultyQuotaDist[quota as number] = (facultyQuotaDist[quota as number] || 0) + 1;
+      } else if (type === 'บุคลากร') {
+        staffQuotaDist[quota] = (staffQuotaDist[quota] || 0) + 1;
+      }
+    });
+    
+    // แปลงเป็นข้อความสำหรับแสดงผล
+    const facultyDistText = Object.entries(facultyQuotaDist)
+      .sort(([a], [b]) => parseInt(a) - parseInt(b))
+      .map(([quota, count]) => `${count} คนได้รับ ${quota} วิชา`)
+      .join(", ");
+    
+    const staffDistText = Object.entries(staffQuotaDist)
+      .sort(([a], [b]) => parseInt(a) - parseInt(b))
+      .map(([quota, count]) => `${count} คนได้รับ ${quota} วิชา`)
+      .join(", ");
+    
+    return (
+      <div className="text-xs font-medium">
+        <div className="flex justify-between items-center">
+          <span className="text-blue-700">อาจารย์ ({facultyCount} คน):</span>
+          <span className="text-blue-700">
+            ~{avgFacultyQuota.toFixed(1)} วิชา/คน
+          </span>
+        </div>
+        
+        <div className="flex justify-between items-center mt-1">
+          <span className="text-purple-700">บุคลากร ({staffCount} คน):</span>
+          <span className="text-purple-700">
+            ~{avgStaffQuota.toFixed(1)} วิชา/คน
+          </span>
+        </div>
+        
+        <div className="mt-1.5 text-xs text-gray-600">
+          <p className="text-blue-600 mb-0.5">การกระจายตัว (อาจารย์):</p>
+          <p className="text-blue-600 mb-1.5 text-xs">{facultyDistText || "ไม่พบข้อมูล"}</p>
+          
+          <p className="text-purple-600 mb-0.5">การกระจายตัว (บุคลากร):</p>
+          <p className="text-purple-600 text-xs">{staffDistText || "ไม่พบข้อมูล"}</p>
+        </div>
+      </div>
+    );
+  })()}
+</div>
               </div>
             </div>
             
             <div className="max-h-96 overflow-auto border border-gray-200 rounded-lg">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="px-4 py-2 text-left">วันที่</th>
-                    <th className="px-4 py-2 text-left">เวลา</th>
-                    <th className="px-4 py-2 text-left">วิชา</th>
-                    <th className="px-4 py-2 text-left">ภาควิชา</th>
-                    <th className="px-4 py-2 text-left">ผู้คุมสอบ (เดิม)</th>
-                    <th className="px-4 py-2 text-left">ผู้คุมสอบ (ใหม่)</th>
-                    <th className="px-4 py-2 text-left">โควต้า</th>
-                    <th className="px-4 py-2 text-left">แก้ไข</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left">วันที่</th>
+                      <th className="px-4 py-2 text-left">เวลา</th>
+                      <th className="px-4 py-2 text-left">วิชา</th>
+                      <th className="px-4 py-2 text-left">ภาควิชา</th>
+                      <th className="px-4 py-2 text-left">ผู้คุมสอบ (เดิม)</th>
+                      <th className="px-4 py-2 text-left">ผู้คุมสอบ (ใหม่)</th>
+                      <th className="px-4 py-2 text-left">โควต้า</th>
+                      <th className="px-4 py-2 text-left">ตรวจสอบ</th> {/* เพิ่มคอลัมน์นี้ */}
+                      <th className="px-4 py-2 text-left">แก้ไข</th>
+                    </tr>
+                  </thead>
+                    <tbody>
                   {previewAssignments.map((assignment, index) => (
                     <tr 
                       key={index} 
@@ -2265,7 +2602,7 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
                           </span>
 
                           {/* ปรับแต่ง tooltip ให้มีความโปร่งใสและเอฟเฟกต์ blur */}
-                          <div className="hidden group-hover:block absolute z-10 bg-white/80 backdrop-blur-lg p-4 rounded-xl shadow-lg border border-gray-200/50 w-72 text-sm transition-all duration-300 transform -translate-y-1">
+                          <div className="hidden group-hover:block absolute z-10 bg-white/80 backdrop-blur-lg p-4 rounded-xl shadow-lg border border-gray-200/50 w-72 text-sm transition-all duration:300 transform -translate-y-1">
                             <div className="flex items-start gap-3">
                               <div className={`p-2 rounded-full ${assignment.isTeachingFaculty ? 'bg-blue-100 text-blue-500' : 'bg-gray-100 text-gray-500'}`}>
                                 {assignment.isTeachingFaculty ? (
@@ -2316,6 +2653,26 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
                                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                                     </svg>
                                     <p className="text-sm font-medium text-blue-700">อาจารย์ผู้สอนวิชานี้</p>
+                                  </div>
+                                )}
+
+                                {assignment.otherAssignments && (
+                                  <div className="mt-2 text-xs text-gray-500">
+                                    <p className="font-medium">ตารางสอนอื่น:</p>
+                                    <p className="mt-0.5">{assignment.otherAssignments}</p>
+                                  </div>
+                                )}
+                                {/* เพิ่มข้อมูลเกี่ยวกับตารางสอบที่ได้รับมอบหมายในส่วน tooltip */}
+                                {assignment.timeConflicts && (
+                                  <div className="mt-2 text-xs text-red-500 bg-red-50 p-2 rounded border border-red-200">
+                                    <p className="font-medium">ความขัดแย้งด้านเวลา:</p>
+                                    <ul className="list-disc pl-4 mt-1">
+                                      {assignment.timeConflicts.map((conflict, idx) => (
+                                        <li key={idx}>
+                                          {conflict.date} - {conflict.timeSlot}: {conflict.subjectCode}
+                                        </li>
+                                      ))}
+                                    </ul>
                                   </div>
                                 )}
 
@@ -2385,25 +2742,7 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
       setShowEditInvigilatorModal(false);
       setSelectedInvForEdit(null);
     }}
-    onConfirm={() => {
-      if (!selectedInvForEdit || currentEditIndex === null) return;
-      
-      const updatedAssignments = [...previewAssignments];
-      updatedAssignments[currentEditIndex] = {
-        ...updatedAssignments[currentEditIndex],
-        newInvigilatorId: selectedInvForEdit.id,
-        newInvigilator: selectedInvForEdit.displayName || selectedInvForEdit.name || '',
-        invigilatorType: selectedInvForEdit.type || '',
-        invigilatorDepartment: selectedInvForEdit.department?.name || "-",
-        quotaUsed: selectedInvForEdit.assignedQuota || 0,
-        quotaTotal: selectedInvForEdit.quota || 0,
-        isTeachingFaculty: false
-      };
-      
-      setPreviewAssignments(updatedAssignments);
-      setShowEditInvigilatorModal(false);
-      toast.success("อัพเดทผู้คุมสอบเรียบร้อย");
-    }}
+    onConfirm={handleEditConfirm}
     confirmText="บันทึกการเปลี่ยนแปลง"
     confirmDisabled={!selectedInvForEdit}
   >
@@ -2509,6 +2848,102 @@ const handleQuickAssignInvigilator = (scheduleId: string) => {
       </div>
     </PopupModal>
   )}
+
+{/* Modal แสดงสถิติการจัดสรร */}
+{showAssignmentStatsModal && (
+  <PopupModal
+    title="สถานะการจัดสรรผู้คุมสอบ"
+    onClose={() => setShowAssignmentStatsModal(false)}
+    onConfirm={() => setShowAssignmentStatsModal(false)}
+    confirmText="ปิด"
+  >
+    <div className="space-y-6">
+      <div className="bg-blue-50 p-4 rounded-lg">
+        <h3 className="font-medium text-blue-700">ข้อมูลการจัดสรรผู้คุมสอบ</h3>
+        <p className="text-sm text-blue-600 mt-1">
+          ไม่พบข้อมูลที่สามารถจัดสรรได้เพิ่มเติม ด้านล่างนี้เป็นสถานะปัจจุบันของการจัดสรรผู้คุมสอบ
+        </p>
+      </div>
+      
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <p className="text-xs text-gray-500">ตารางสอบทั้งหมด</p>
+          <p className="text-2xl font-bold">{assignmentStats.totalSchedules}</p>
+        </div>
+        
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <p className="text-xs text-gray-500">จัดสรรแล้ว</p>
+          <p className="text-2xl font-bold text-green-600">{assignmentStats.assignedSchedules}</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {Math.round((assignmentStats.assignedSchedules / assignmentStats.totalSchedules) * 100) || 0}% ของทั้งหมด
+          </p>
+        </div>
+        
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <p className="text-xs text-gray-500">รอการจัดสรร</p>
+          <p className="text-2xl font-bold text-yellow-600">{assignmentStats.unassignedSchedules}</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {Math.round((assignmentStats.unassignedSchedules / assignmentStats.totalSchedules) * 100) || 0}% ของทั้งหมด
+          </p>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
+          <p className="text-sm text-blue-700 font-medium">จัดสรรให้อาจารย์</p>
+          <p className="text-xl font-bold text-blue-600 mt-1">{assignmentStats.facultyAssignments} รายการ</p>
+          <div className="w-full h-3 bg-blue-100 rounded-full mt-2">
+            <div 
+              className="h-full bg-blue-500 rounded-full" 
+              style={{ width: `${Math.round((assignmentStats.facultyAssignments / assignmentStats.assignedSchedules) * 100) || 0}%` }}
+            ></div>
+          </div>
+        </div>
+        
+        <div className="bg-purple-50 rounded-lg border border-purple-200 p-4">
+          <p className="text-sm text-purple-700 font-medium">จัดสรรให้บุคลากร</p>
+          <p className="text-xl font-bold text-purple-600 mt-1">{assignmentStats.staffAssignments} รายการ</p>
+          <div className="w-full h-3 bg-purple-100 rounded-full mt-2">
+            <div 
+              className="h-full bg-purple-500 rounded-full" 
+              style={{ width: `${Math.round((assignmentStats.staffAssignments / assignmentStats.assignedSchedules) * 100) || 0}%` }}
+            ></div>
+          </div>
+        </div>
+      </div>
+      
+      {assignmentStats.schedulesByDepartment && (
+        <div>
+          <h4 className="font-medium text-gray-700 mb-2">จำนวนการจัดสรรแยกตามภาควิชา</h4>
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left">ภาควิชา</th>
+                  <th className="px-4 py-2 text-right">จำนวน</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(assignmentStats.schedulesByDepartment).map(([dept, count]) => (
+                  <tr key={dept} className="border-t border-gray-200">
+                    <td className="px-4 py-2">{dept}</td>
+                    <td className="px-4 py-2 text-right font-medium">{count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      
+      <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+        <p className="text-sm text-yellow-700">
+          <span className="font-medium">หมายเหตุ:</span> ระบบได้จัดสรรผู้คุมสอบให้ครบถ้วนตามเงื่อนไขที่กำหนดแล้ว หากต้องการจัดสรรเพิ่มเติม กรุณาแก้ไขเงื่อนไขการกรอง หรือจัดสรรโดยใช้วิธีการกำหนดเอง
+        </p>
+      </div>
+    </div>
+  </PopupModal>
+)}
     </div>
   );
 }

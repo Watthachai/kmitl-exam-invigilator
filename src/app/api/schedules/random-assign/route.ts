@@ -207,7 +207,10 @@ export async function POST(request: NextRequest) {
     const assignments: Assignment[] = [];
     const assignedSchedules = new Set<string>();
     
-    // รอบที่ 1: จัดวิชาที่อาจารย์สอนเอง
+    // แก้ไขในส่วนของ รอบที่ 1: จัดวิชาที่อาจารย์สอนเอง
+    // เพิ่มข้อมูลเพื่อตรวจสอบการคุมซ้อนของอาจารย์ในเวลาเดียวกัน
+    const assignedTimeSlots = new Map<string, Set<string>>();
+
     for (const schedule of schedules) {
       if (assignedSchedules.has(schedule.id)) continue;
       
@@ -237,7 +240,23 @@ export async function POST(request: NextRequest) {
         // ตรวจสอบโควต้า
         if (invigilator.assignedQuota >= invigilator.quota) continue;
         
-        // ตรวจสอบการซ้อนทับเวลา
+        // สร้าง unique time slot key จากวันที่และเวลา
+        const timeSlotKey = `${new Date(schedule.date).toDateString()}_${schedule.startTime}_${schedule.endTime}`;
+        
+        // ตรวจสอบว่าอาจารย์คนนี้ได้รับมอบหมายให้คุมในช่วงเวลานี้แล้วหรือไม่
+        if (!assignedTimeSlots.has(invigilator.id)) {
+          assignedTimeSlots.set(invigilator.id, new Set<string>());
+        }
+        
+        const invigilatorTimeSlots = assignedTimeSlots.get(invigilator.id)!;
+        
+        // ถ้าอาจารย์คนนี้ได้รับมอบหมายช่วงเวลานี้แล้ว ให้ข้ามไป
+        if (invigilatorTimeSlots.has(timeSlotKey)) {
+          console.log(`Skipping: ${invigilator.name} already assigned at ${timeSlotKey}`);
+          continue;
+        }
+        
+        // ตรวจสอบการซ้อนทับเวลาจากตารางที่มีอยู่ในฐานข้อมูล
         if (respectTimeConstraints) {
           const hasConflict = invigilator.schedules.some(existingSchedule => {
             return new Date(existingSchedule.date).toDateString() === 
@@ -247,11 +266,29 @@ export async function POST(request: NextRequest) {
                      (new Date(existingSchedule.endTime) >= new Date(schedule.startTime))
                    );
           });
-          if (hasConflict) continue;
+          
+          // ตรวจสอบความขัดแย้งกับรายการที่กำลังจัดสรรในชุดนี้
+          const hasAssignmentConflict = assignments.some(assignment => {
+            // ตรวจสอบว่าเป็นตารางต่างกันในวันเดียวกันและเวลาซ้อนทับ
+            return assignment.scheduleId !== schedule.id &&
+                   new Date(assignment.date).toDateString() === new Date(schedule.date).toDateString() &&
+                   assignment.newInvigilatorId === invigilator.id &&
+                   // ใช้การเปรียบเทียบช่วงเวลาที่ละเอียดขึ้น
+                   schedule.scheduleDateOption === assignment.scheduleDateOption;
+          });
+          
+          if (hasConflict || hasAssignmentConflict) {
+            console.log(`Time conflict for ${invigilator.name} at ${new Date(schedule.date).toDateString()}`);
+            continue;
+          }
         }
         
         // พบอาจารย์ผู้สอนที่เหมาะสม
         assignedInvigilator = invigilator;
+        
+        // เพิ่มช่วงเวลาที่ได้รับมอบหมายลงในรายการ
+        invigilatorTimeSlots.add(timeSlotKey);
+        
         break;
       }
       
@@ -277,6 +314,7 @@ export async function POST(request: NextRequest) {
       });
     }
     
+    // ทำแบบเดียวกันในรอบที่ 2: จัดสรรวิชาที่เหลือ
     for (const schedule of schedules) {
       if (assignedSchedules.has(schedule.id)) continue;
       
@@ -293,6 +331,22 @@ export async function POST(request: NextRequest) {
           if (taughtSubjects.includes(schedule.id)) continue;
         }
         
+        // สร้าง unique time slot key จากวันที่และเวลา
+        const timeSlotKey = `${new Date(schedule.date).toDateString()}_${schedule.startTime}_${schedule.endTime}`;
+        
+        // ตรวจสอบว่าอาจารย์คนนี้ได้รับมอบหมายให้คุมในช่วงเวลานี้แล้วหรือไม่
+        if (!assignedTimeSlots.has(invigilator.id)) {
+          assignedTimeSlots.set(invigilator.id, new Set<string>());
+        }
+        
+        const invigilatorTimeSlots = assignedTimeSlots.get(invigilator.id)!;
+        
+        // ถ้าอาจารย์คนนี้ได้รับมอบหมายช่วงเวลานี้แล้ว ให้ข้ามไป
+        if (invigilatorTimeSlots.has(timeSlotKey)) {
+          console.log(`Skipping in round 2: ${invigilator.name} already assigned at ${timeSlotKey}`);
+          continue;
+        }
+        
         // ตรวจสอบข้อจำกัดด้านเวลา
         if (respectTimeConstraints) {
           const hasConflict = invigilator.schedules.some(existingSchedule => {
@@ -303,10 +357,23 @@ export async function POST(request: NextRequest) {
                      (new Date(existingSchedule.endTime) >= new Date(schedule.startTime))
                    );
           });
-          if (hasConflict) continue;
+          
+          // ตรวจสอบความขัดแย้งกับรายการที่กำลังจัดสรรในชุดนี้
+          const hasAssignmentConflict = assignments.some(assignment => {
+            return assignment.scheduleId !== schedule.id &&
+                   new Date(assignment.date).toDateString() === new Date(schedule.date).toDateString() &&
+                   assignment.newInvigilatorId === invigilator.id &&
+                   schedule.scheduleDateOption === assignment.scheduleDateOption;
+          });
+          
+          if (hasConflict || hasAssignmentConflict) continue;
         }
         
         assignedInvigilator = invigilator;
+        
+        // เพิ่มช่วงเวลาที่ได้รับมอบหมายลงในรายการ
+        invigilatorTimeSlots.add(timeSlotKey);
+        
         break;
       }
       
@@ -354,7 +421,7 @@ function addAssignment(schedule: ExtendedSchedule, invigilator: ExtendedInvigila
     invigilator.name;
   
   assignments.push({
-    scheduleId: schedule.id,
+    scheduleId: schedule.id,  // เปลี่ยนจาก id เป็น scheduleId
     date: schedule.date,
     timeSlot: `${startTimeStr} - ${endTimeStr}`,
     scheduleDateOption: schedule.scheduleDateOption || '',

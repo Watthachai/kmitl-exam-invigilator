@@ -23,17 +23,30 @@ interface Schedule {
     subject: {
       code: string;
       name: string;
+      department?: {
+        name: string;
+      };
     };
     professor: {
       id: string;
       name: string;
     };
+    additionalProfessors?: Array<{
+      professor: {
+        id: string;
+        name: string;
+      };
+    }>;
   };
   priority: boolean;
   isGenEd: boolean;
   quotaFilled: boolean;
   departmentQuota: number;
   invigilatorId?: string;
+  _debug?: {
+    isPriorityForUser?: boolean;
+    [key: string]: unknown;
+  };
 }
 
 export default function DashboardPage() {
@@ -192,27 +205,27 @@ export default function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100"
       >
-        <div className="space-y-1 text-center md:text-left">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-800">
+        <div className="space-y-1 text-center md:text-left w-full">
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-3">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-800 break-words">
               ยินดีต้อนรับ, {session?.user?.name}
             </h1>
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full whitespace-nowrap">
+            <div className="flex flex-wrap justify-center md:justify-start gap-2 mt-2 md:mt-0">
+              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs md:text-sm rounded-full whitespace-nowrap">
                 โควต้าคงเหลือ: {session?.user?.quota ?? 0}/{session?.user?.maxQuota ?? 0}
               </span>
-              <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full whitespace-nowrap">
+              <span className="px-3 py-1 bg-green-100 text-green-700 text-xs md:text-sm rounded-full whitespace-nowrap">
                 ได้รับมอบหมายแล้ว: {session?.user?.assignedQuota ?? 0}
               </span>
             </div>
           </div>
-          <p className="text-gray-500">
+          <p className="text-gray-500 text-sm md:text-base">
             ระบบจัดการการคุมสอบ คณะวิศวกรรมศาสตร์
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Clock className="w-5 h-5 text-blue-500" />
-          <span className="text-sm text-gray-600">
+        <div className="flex items-center gap-2 mt-4 md:mt-0">
+          <Clock className="w-4 h-4 md:w-5 md:h-5 text-blue-500 flex-shrink-0" />
+          <span className="text-xs md:text-sm text-gray-600">
             {new Date().toLocaleDateString('th-TH', {
               weekday: 'long',
               year: 'numeric',
@@ -224,18 +237,18 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* Quick Actions Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white"
+          className="bg-gradient-to-br from-blue-500 to-blue-600 p-4 md:p-6 rounded-xl shadow-lg text-white"
         >
-          <div className="flex items-center gap-4">
-            <Calendar className="w-8 h-8" />
+          <div className="flex items-center gap-3 md:gap-4">
+            <Calendar className="w-6 h-6 md:w-8 md:h-8 flex-shrink-0" />
             <div>
-              <h3 className="text-lg font-semibold">ตารางคุมสอบ</h3>
-              <p className="text-sm text-blue-100">ดูตารางการคุมสอบของคุณ</p>
+              <h3 className="text-base md:text-lg font-semibold">ตารางคุมสอบ</h3>
+              <p className="text-xs md:text-sm text-blue-100">ดูตารางการคุมสอบของคุณ</p>
             </div>
           </div>
         </motion.div>
@@ -244,13 +257,13 @@ export default function DashboardPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-gradient-to-br from-orange-500 to-orange-600 p-6 rounded-xl shadow-lg text-white"
+          className="bg-gradient-to-br from-orange-500 to-orange-600 p-4 md:p-6 rounded-xl shadow-lg text-white"
         >
-          <div className="flex items-center gap-4">
-            <MessageCircle className="w-8 h-8" />
+          <div className="flex items-center gap-3 md:gap-4">
+            <MessageCircle className="w-6 h-6 md:w-8 md:h-8 flex-shrink-0" />
             <div>
-              <h3 className="text-lg font-semibold">แจ้งปัญหา</h3>
-              <p className="text-sm text-orange-100">รายงานปัญหาการคุมสอบ</p>
+              <h3 className="text-base md:text-lg font-semibold">แจ้งปัญหา</h3>
+              <p className="text-xs md:text-sm text-orange-100">รายงานปัญหาการคุมสอบ</p>
             </div>
           </div>
         </motion.div>
@@ -259,13 +272,13 @@ export default function DashboardPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-gradient-to-br from-purple-500 to-purple-600 p-6 rounded-xl shadow-lg text-white"
+          className="bg-gradient-to-br from-purple-500 to-purple-600 p-4 md:p-6 rounded-xl shadow-lg text-white sm:col-span-2 md:col-span-1"
         >
-          <div className="flex items-center gap-4">
-            <Users className="w-8 h-8" />
+          <div className="flex items-center gap-3 md:gap-4">
+            <Users className="w-6 h-6 md:w-8 md:h-8 flex-shrink-0" />
             <div>
-              <h3 className="text-lg font-semibold">โปรไฟล์</h3>
-              <p className="text-sm text-purple-100">จัดการข้อมูลส่วนตัว</p>
+              <h3 className="text-base md:text-lg font-semibold">โปรไฟล์</h3>
+              <p className="text-xs md:text-sm text-purple-100">จัดการข้อมูลส่วนตัว</p>
             </div>
           </div>
         </motion.div>
@@ -286,17 +299,17 @@ export default function DashboardPage() {
             <div className="p-6 text-center">
               <div className="flex flex-col items-center justify-center space-y-4">
                 <div className="p-3 bg-red-100 text-red-700 rounded-full">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 md:h-8 md:w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-lg font-medium text-gray-900">ไม่สามารถโหลดข้อมูลได้</h3>
-                  <p className="text-gray-500">{error}</p>
+                  <h3 className="text-base md:text-lg font-medium text-gray-900">ไม่สามารถโหลดข้อมูลได้</h3>
+                  <p className="text-sm md:text-base text-gray-500">{error}</p>
                   
                   {/* Add specific guidance for profile issues */}
-                  {error.includes('ข้อมูลโปรไฟล์') && (
-                    <div className="mt-4 p-4 bg-blue-50 text-blue-700 rounded-lg text-sm">
+                  {error?.includes('ข้อมูลโปรไฟล์') && (
+                    <div className="mt-4 p-4 bg-blue-50 text-blue-700 rounded-lg text-xs md:text-sm">
                       <h4 className="font-semibold mb-2">คำแนะนำ:</h4>
                       <ul className="list-disc list-inside space-y-1">
                         <li>กรุณาตรวจสอบว่าบัญชีของคุณมีข้อมูลครบถ้วน</li>
@@ -307,21 +320,21 @@ export default function DashboardPage() {
                   )}
                 </div>
                 
-                <div className="flex gap-3">
+                <div className="flex flex-wrap justify-center gap-3 mt-2">
                   <button 
                     onClick={() => fetchAvailableSchedules()}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    className="px-3 py-2 bg-blue-500 text-white text-xs md:text-sm rounded-lg hover:bg-blue-600 transition-colors"
                   >
                     ลองใหม่อีกครั้ง
                   </button>
                   
                   {/* Add profile button if it's a profile issue */}
-                  {error.includes('ข้อมูลโปรไฟล์') && (
+                  {error?.includes('ข้อมูลโปรไฟล์') && (
                     <button 
                       onClick={() => router.push('/profile')}
-                      className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+                      className="px-3 py-2 bg-gray-100 text-gray-800 text-xs md:text-sm rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
                     >
-                      <Users className="w-4 h-4" />
+                      <Users className="w-3 h-3 md:w-4 md:h-4" />
                       ไปที่โปรไฟล์
                     </button>
                   )}
@@ -344,17 +357,25 @@ export default function DashboardPage() {
             </div>
           ) : (
             availableSchedules.map((schedule) => {
-              // เพิ่ม debug logs
+              // ตรวจสอบว่าผู้ใช้เป็นเจ้าของวิชาหรือไม่ รวมถึง additionalProfessors ด้วย
+              const isProfessor = schedule.subjectGroup.professor?.id === session?.user?.professorId || 
+                                  schedule.subjectGroup.additionalProfessors?.some(
+                                    ap => ap.professor.id === session?.user?.professorId
+                                  );
+
+              // แสดงข้อมูล debug ให้ละเอียดขึ้น
               console.log('Schedule debug:', {
                 scheduleId: schedule.id,
                 subjectCode: schedule.subjectGroup.subject.code,
+                subjectName: schedule.subjectGroup.subject.name,
                 professorId: schedule.subjectGroup.professor?.id,
+                professorName: schedule.subjectGroup.professor?.name,
+                additionalProfessorIds: schedule.subjectGroup.additionalProfessors?.map(ap => ap.professor.id) || [],
                 currentUserProfessorId: session?.user?.professorId,
-                isProfessorMatch: session?.user?.professorId === schedule.subjectGroup.professor?.id
+                isProfessorMatch: isProfessor,
+                debug: schedule._debug // แสดงข้อมูล debug จาก API
               });
 
-              const isProfessor = session?.user?.professorId === schedule.subjectGroup.professor?.id;
-              
               return (
                 <div 
                   key={schedule.id} 
@@ -364,10 +385,10 @@ export default function DashboardPage() {
                       : 'hover:bg-gray-50'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-medium text-sm md:text-base break-words">
                           {schedule.subjectGroup.subject.code} - {schedule.subjectGroup.subject.name}
                         </h3>
                         {/* แสดง badge ถ้าเป็นผู้สอน */}
@@ -379,36 +400,41 @@ export default function DashboardPage() {
                       </div>
                       
                       {/* เพิ่มการแสดงชื่อผู้สอน */}
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-xs md:text-sm text-gray-600 mt-1">
                         ผู้สอน: {schedule.subjectGroup.professor?.name || 'ไม่ระบุ'} 
                         {isProfessor && ' (คุณ)'}
                       </p>
+                      {/* เพิ่มการแสดงชื่อภาควิชา */}
+                      <p className="text-xs md:text-sm text-gray-600">
+                        ภาควิชา: {schedule.subjectGroup.subject.department?.name || 'ไม่ระบุ'}
+                        {schedule._debug?.isPriorityForUser && ' (ภาควิชาของคุณ)'}
+                      </p>
                       
-                      <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
-                        <span className={`px-2 py-1 rounded-full ${
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs md:text-sm text-gray-600">
+                        <span className={`px-2 py-1 rounded-full text-xs ${
                           schedule.examType === 'MIDTERM' 
                             ? 'bg-orange-100 text-orange-700' 
                             : 'bg-purple-100 text-purple-700'
                         }`}>
                           {schedule.examType === 'MIDTERM' ? '📝 สอบกลางภาค' : '📚 สอบปลายภาค'}
                         </span>
-                        <span className={`px-2 py-1 rounded-full ${
+                        <span className={`px-2 py-1 rounded-full text-xs ${
                           schedule.scheduleDateOption === 'ช่วงเช้า'
                             ? 'bg-yellow-100 text-yellow-700'
                             : 'bg-indigo-100 text-indigo-700'
                         }`}>
                           {schedule.scheduleDateOption === 'ช่วงเช้า' ? '🌅 ช่วงเช้า' : '🌆 ช่วงบ่าย'}
                         </span>
-                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full">
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs">
                           {schedule.semester}/{schedule.academicYear}
                         </span>
                       </div>
 
-                      <p className="mt-2 text-sm text-gray-500">
+                      <p className="mt-2 text-xs md:text-sm text-gray-500">
                         ห้อง: {schedule.room.building} {schedule.room.roomNumber}
                       </p>
                       
-                      <div className="mt-2 flex items-center gap-2">
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
                         {schedule.priority && (
                           <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">
                             🎯 วิชาภาควิชา
@@ -425,8 +451,8 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     
-                    <div className="flex flex-col items-end gap-2">
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm whitespace-nowrap">
+                    <div className="flex flex-row md:flex-col items-center md:items-end gap-2 justify-between md:justify-end mt-3 md:mt-0">
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs whitespace-nowrap">
                         📅 {new Date(schedule.date).toLocaleDateString('th-TH', {
                           year: 'numeric',
                           month: 'short',
@@ -435,13 +461,13 @@ export default function DashboardPage() {
                       </span>
                       <button
                         onClick={() => handleSelectSchedule(schedule.id)}
-                        className={`px-4 py-2 text-white text-sm rounded-lg transition-colors ${
+                        className={`px-4 py-2 text-white text-xs md:text-sm rounded-lg transition-colors ${
                           isProfessor 
                             ? 'bg-blue-600 hover:bg-blue-700' 
                             : 'bg-blue-500 hover:bg-blue-600'
                         }`}
                       >
-                        {isProfessor ? '✨ เลือกคุมสอบ (ผู้สอน)' : '🎯 เลือกคุมสอบ'}
+                        {isProfessor ? '✨ เลือกคุมสอบ' : '🎯 เลือกคุมสอบ'}
                       </button>
                     </div>
                   </div>
@@ -465,8 +491,8 @@ export default function DashboardPage() {
         <div className="divide-y divide-gray-100">
           {isLoading ? (
             <div className="p-4 text-center text-gray-500">
-              <div className="animate-spin inline-block w-6 h-6 border-[3px] border-current border-t-transparent text-blue-600 rounded-full mr-2" />
-              กำลังโหลดข้อมูล...
+              <div className="animate-spin inline-block w-5 h-5 border-[2px] border-current border-t-transparent text-blue-600 rounded-full mr-2" />
+              <span className="text-xs md:text-sm">กำลังโหลดข้อมูล...</span>
             </div>
           ) : upcomingExams.length === 0 ? (
             <div className="p-4 text-center text-gray-500">

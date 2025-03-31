@@ -27,17 +27,20 @@ const notoSansThai = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "KMITL | Invigilator",
-  description: "King Mongkut's Institute of Technology Ladkrabang Invigilation System for Engineering Faculty",
+  title: 'KMITL Exam Invigilator',
+  description: 'ระบบจัดการการคุมสอบ คณะวิศวกรรมศาสตร์ สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง',
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="th">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+      </head>
       <body
         className={`${notoSansThai.variable} font-thai antialiased`}
         >
